@@ -121,6 +121,15 @@ public class Type extends Reference {
         this.declaration = declaration;
     }
     
+    /**
+     * Is this type a type constructor? Warning: this is
+     * not a "deep implementation", and a type constructor
+     * type can be hidden behind a type alias. Therefore,
+     * it's usually necessary to call 
+     * {@link Type#resolveAliases()} before testing this.
+     * 
+     * @return true if this type is a type constructor
+     */
     public boolean isTypeConstructor() {
         return typeConstructor;
     }
@@ -553,7 +562,7 @@ public class Type extends Reference {
                 return type.isAnything() || type.isObject();
             }
             else if (type.isTypeConstructor()) {
-                return isAnything() || isObject();
+                return false;
             }
             else if (isObject()) {
                 return type.isObject();
@@ -1086,8 +1095,7 @@ public class Type extends Reference {
      *         variances and substitution of type arguments
      */
     public Type substitute(TypedReference source) {
-        Type receiver =
-                source.getQualifyingType();
+        Type receiver = source.getQualifyingType();
         return substitute(source.getTypeArguments(),
                 receiver==null ? null :
                     receiver.collectVarianceOverrides(),
@@ -1361,9 +1369,15 @@ public class Type extends Reference {
         }
         
         while (dec.isAlias()) {
-            dec = dec.getExtendedType().getDeclaration();
-            if (dec==null) {
+            Type et = dec.getExtendedType();
+            if (et==null) {
                 return null;
+            }
+            else {
+                dec = et.getDeclaration();
+                if (dec==null) {
+                    return null;
+                }
             }
         }
         
@@ -1846,6 +1860,7 @@ public class Type extends Reference {
                 }
             }
             if (tp.isTypeConstructor()) {
+                //TODO: construct a type alias instead!
                 result.setTypeConstructor(true);
                 result.setTypeConstructorParameter(tp);
             }
@@ -2625,8 +2640,8 @@ public class Type extends Reference {
     }
 
     public List<Type> getSatisfiedTypes() {
-        List<Type> sts = 
-                getDeclaration().getSatisfiedTypes();
+        TypeDeclaration dec = getDeclaration();
+        List<Type> sts = dec.getSatisfiedTypes();
         if (getTypeArguments().isEmpty()) {
             return sts; 
         }
@@ -2641,8 +2656,8 @@ public class Type extends Reference {
     }
 
     public Type getExtendedType() {
-        Type et = 
-                getDeclaration().getExtendedType();
+        TypeDeclaration dec = getDeclaration();
+        Type et = dec.getExtendedType();
         if (et==null) {
             return null;
         }
@@ -2657,8 +2672,8 @@ public class Type extends Reference {
     }
 
     public List<Type> getCaseTypes() {
-        List<Type> cts = 
-                getDeclaration().getCaseTypes();
+        TypeDeclaration dec = getDeclaration();
+        List<Type> cts = dec.getCaseTypes();
         if (cts==null) {
             return null;
         }
