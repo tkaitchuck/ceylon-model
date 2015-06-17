@@ -555,6 +555,10 @@ public class Unit {
         return (Class) getLanguageModuleDeclaration("Entry");
     }
     
+    public TypeAlias getImmutableMaskDeclaration() {
+        return (TypeAlias) getLanguageModuleDeclaration("ImmutableMask");
+    }
+    
     Type getCallableType(Reference ref, Type rt) {
     	Type result = rt;
     	Declaration declaration = ref.getDeclaration();
@@ -1742,6 +1746,8 @@ public class Unit {
         put("annotation");
         put("optional");
         put("serializable");
+        put("blocking");
+        put("immutable");
     }
     public Map<String, String> getModifiers() {
         return modifiers;

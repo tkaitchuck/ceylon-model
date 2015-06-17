@@ -23,6 +23,7 @@ public class Function extends FunctionOrValue implements Generic, Scope, Functio
     private Object annotationConstructor;
     private boolean deferred;
     private boolean anonymous;
+    private boolean blocking;
     
     public Object getAnnotationConstructor() {
         return annotationConstructor;
@@ -107,6 +108,14 @@ public class Function extends FunctionOrValue implements Generic, Scope, Functio
     @Override
     public boolean isNamed() {
         return !anonymous;
+    }
+
+    public boolean isBlocking() {
+        return blocking;
+    }
+
+    public void setBlocking(boolean blocking) {
+        this.blocking = blocking;
     }
 
     @Override

@@ -22,6 +22,7 @@ public class Constructor extends TypeDeclaration implements Scope, Functional {
     private boolean overloaded;
     private boolean abstraction;
     private boolean abstr;
+    private boolean blocking;
     private List<Declaration> overloads;
     private List<Declaration> members = new ArrayList<Declaration>(3);
     private List<Annotation> annotations = new ArrayList<Annotation>(4);
@@ -68,6 +69,14 @@ public class Constructor extends TypeDeclaration implements Scope, Functional {
         return abstraction;
     }
     
+    public boolean isBlocking() {
+        return blocking;
+    }
+
+    public void setBlocking(boolean blocking) {
+        this.blocking = blocking;
+    }
+
     @Override
     public List<Declaration> getOverloads() {
         return overloads;
