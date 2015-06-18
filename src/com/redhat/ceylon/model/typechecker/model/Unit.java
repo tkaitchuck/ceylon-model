@@ -1748,6 +1748,7 @@ public class Unit {
         put("serializable");
         put("blocking");
         put("immutable");
+        put("mutable");
     }
     public Map<String, String> getModifiers() {
         return modifiers;

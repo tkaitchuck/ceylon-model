@@ -21,6 +21,7 @@ public class Class extends ClassOrInterface implements Functional {
     private boolean named = true;
     private boolean fin;
     private boolean serializable;
+    private boolean mutable;
     private List<Declaration> overloads;
     private List<Reference> unimplementedFormals = 
             Collections.<Reference>emptyList();
@@ -342,6 +343,14 @@ public class Class extends ClassOrInterface implements Functional {
 
     public void setSerializable(boolean serializable) {
         this.serializable = serializable;
+    }
+
+    public boolean isMutable() {
+        return mutable;
+    }
+
+    public void setMutable(boolean mutable) {
+        this.mutable = mutable;
     }
 
     public boolean isJavaEnum() {
