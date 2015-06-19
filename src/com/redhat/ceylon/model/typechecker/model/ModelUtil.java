@@ -174,8 +174,9 @@ public class ModelUtil {
     
     public static boolean isOverloadedVersion(Declaration decl) {
         return decl!=null && 
-                decl.isOverloaded() && 
-                !decl.isAbstraction();
+                (decl.isOverloaded() && 
+                !decl.isAbstraction()) &&
+                !decl.isNative();
     }
 
     static boolean hasMatchingSignature(
@@ -2388,13 +2389,31 @@ public class ModelUtil {
         }
         return result;
     }
-
+    
+    /**
+     * Is the given declaration a constructor or singleton
+     * constructor of a toplevel class?
+     * 
+     * Constructors of toplevel classes can be directly
+     * imported into the toplevel namespace of a compilation
+     * unit.
+     */
     public static boolean isToplevelClassConstructor(
-            TypeDeclaration td, Declaration m) {
+            TypeDeclaration td, Declaration dec) {
         return td.isToplevel() && 
-                m instanceof Constructor;
+                (dec instanceof Constructor ||
+                dec instanceof FunctionOrValue && 
+                ((FunctionOrValue) dec).getTypeDeclaration() 
+                        instanceof Constructor);
     }
 
+    /**
+     * Is the given declaration a toplevel anonymous class?
+     * 
+     * Members of toplevel anonymous classes can be directly
+     * imported into the toplevel namespace of a compilation
+     * unit.
+     */
     public static boolean isToplevelAnonymousClass(Scope s) {
         if (s instanceof Class) {
             Class td = (Class) s;
@@ -2405,27 +2424,16 @@ public class ModelUtil {
         }
     }
     
+    public static boolean isNative(Declaration dec) {
+        return dec != null && dec.isNative();
+    }
+    
     public static boolean isNativeHeader(Declaration dec) {
-        return dec.isNative() && dec.getNative().isEmpty();
+        return dec != null && dec.isNativeHeader();
     }
     
     public static boolean isNativeImplementation(Declaration dec) {
-        return dec.isNative() && !dec.getNative().isEmpty();
-    }
-    
-    public static boolean hasNativeImplementation(Declaration dec) {
-        if (dec.isNative()) {
-            List<Declaration> overloads = dec.getOverloads();
-            if (overloads != null) {
-                for (Declaration overload: overloads) {
-                    if (overload.isNative() && 
-                            !overload.getNative().isEmpty()) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        return dec != null && dec.isNative() && !dec.isNativeHeader();
     }
     
     public static boolean isInNativeContainer(Declaration dec) {
@@ -2451,7 +2459,7 @@ public class ModelUtil {
             Declaration abstraction = null;
             if (backendSupport.supportsBackend(
                     Backend.fromAnnotation(
-                            dec.getNative()))) {
+                            dec.getNativeBackend()))) {
                 abstraction = dec;
             }
             else {
@@ -2461,7 +2469,7 @@ public class ModelUtil {
                     for (Declaration d: overloads) {
                         if (backendSupport.supportsBackend(
                                 Backend.fromAnnotation(
-                                        d.getNative()))) {
+                                        d.getNativeBackend()))) {
                             abstraction = d;
                             break;
                         }
@@ -2518,15 +2526,70 @@ public class ModelUtil {
             Scope scope, String name, String backend) {
         for (Declaration dec: scope.getMembers()) {
             if (isResolvable(dec) && isNamed(name, dec)) {
-                Declaration nativeDec = 
-                        getNativeDeclaration(dec, 
-                                Backend.fromAnnotation(backend));
-                if (nativeDec != null) {
-                    return nativeDec;
+                String nat = dec.getNativeBackend();
+                if (nat==null) {
+                    return dec;
+                }
+                else {
+                    if (nat.equals(backend)) {
+                        return dec;
+                    }
                 }
             }
         }
         return null;
+    }
+    
+    /**
+     * Find the header with the given name that occurs
+     * directly in the given scope or if that scope is
+     * itself a native implementation first look up
+     * the scope's native header and find the requested
+     * header there.
+     *  
+     * @param scope any scope
+     * @param name the name of a declaration
+     * 
+     * @return the matching declaration
+     */
+    public static Declaration getNativeHeader(Scope container, String name) {
+        if (container instanceof Declaration) {
+            Declaration cd = (Declaration)container;
+            if (cd.isNative() && !cd.isNativeHeader()) {
+                // The container is a native implementation so
+                // we first need to find _its_ header
+                Scope c =
+                        (Scope)getDirectMemberForBackend(cd.getContainer(),
+                                cd.getName(),
+                                Backend.None.nativeAnnotation);
+                if (c != null) {
+                    // Is this the Value part of an object?
+                    if (c instanceof Value && isObject((Value)c)) {
+                        // Then use the Class part as the container
+                        c = ((Value)c).getType().getDeclaration();
+                    }
+                    container = c;
+                }
+            }
+        }
+        // Find the header
+        Declaration header =
+                getDirectMemberForBackend(container,
+                        name,
+                        Backend.None.nativeAnnotation);
+        return header;
+    }
+    
+    // Check if the Value is part of an object (is there a better way to check this?)
+    public static boolean isObject(Value v) {
+        return v.getType().getDeclaration().getQualifiedNameString().equals(v.getQualifiedNameString());
+    }
+
+    public static boolean isImplemented(Declaration decl) {
+        if (decl instanceof FunctionOrValue) {
+            return ((FunctionOrValue)decl).isImplemented();
+        }
+        return false;
     }
     
     public static boolean eq(Object decl, Object other) {
@@ -2576,11 +2639,13 @@ public class ModelUtil {
         return pkg != null ? pkg.getModule() : null;
     }
 
-    public static ClassOrInterface getClassOrInterfaceContainer(Element decl){
+    public static ClassOrInterface getClassOrInterfaceContainer(
+            Element decl) {
         return getClassOrInterfaceContainer(decl, true);
     }
     
-    public static ClassOrInterface getClassOrInterfaceContainer(Element decl, boolean includingDecl){
+    public static ClassOrInterface getClassOrInterfaceContainer(
+            Element decl, boolean includingDecl) {
         if (!includingDecl) {
             decl = (Element) decl.getContainer();
         }
@@ -2635,11 +2700,11 @@ public class ModelUtil {
      * @return true if the declaration is within a class or interface
      */
     public static boolean withinClassOrInterface(Declaration decl) {
-        return decl.getContainer() instanceof com.redhat.ceylon.model.typechecker.model.ClassOrInterface;
+        return decl.getContainer() instanceof ClassOrInterface;
     }
 
     public static boolean withinClass(Declaration decl) {
-        return decl.getContainer() instanceof com.redhat.ceylon.model.typechecker.model.Class;
+        return decl.getContainer() instanceof Class;
     }
 
     public static boolean isLocalToInitializer(Declaration decl) {

@@ -31,6 +31,7 @@ public abstract class TypeDeclaration extends Declaration
     private boolean inconsistentType;
     private boolean dynamic;
 	private boolean sealed;
+    private List<TypedDeclaration> caseValues;
 
 	/** 
 	 * true if the type arguments of this type are not 
@@ -89,6 +90,14 @@ public abstract class TypeDeclaration extends Declaration
     
     public boolean isFinal() {
     	return false;
+    }
+    
+    public boolean isObjectClass() {
+        return false;
+    }
+
+    public boolean isValueConstructor() {
+        return false;
     }
 
     @Override
@@ -601,8 +610,7 @@ public abstract class TypeDeclaration extends Declaration
         if (container!=null && container.equals(this)) {
             return null;
         }
-        else if (!(this instanceof Constructor) && 
-                isInheritedFromSupertype(member)) {
+        else if (isInheritedFromSupertype(member)) {
             return this;
         }
         else if (getContainer()!=null) {
@@ -1041,6 +1049,14 @@ public abstract class TypeDeclaration extends Declaration
 
     public boolean isSequence() {
         return false;
+    }
+    
+    public List<TypedDeclaration> getCaseValues() {
+        return caseValues;
+    }
+
+    public void setCaseValues(List<TypedDeclaration> caseValues) {
+        this.caseValues = caseValues;
     }
 
 }

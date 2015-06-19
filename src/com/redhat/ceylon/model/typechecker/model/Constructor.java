@@ -1,24 +1,23 @@
 package com.redhat.ceylon.model.typechecker.model;
 
 import static com.redhat.ceylon.model.typechecker.model.DeclarationKind.CONSTRUCTOR;
+import static java.util.Collections.emptyList;
+import static java.util.Collections.singletonList;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * A method. Note that a method must have
- * at least one parameter list.
+ * A constructor.
  *
  * @author Gavin King
  */
-public class Constructor extends TypeDeclaration implements Scope, Functional {
+public class Constructor extends TypeDeclaration implements Functional {
 
     public Constructor() {}
     
-    //private boolean formal;
-
-    private List<ParameterList> parameterLists = new ArrayList<ParameterList>(1);
+    private ParameterList parameterList;
     private boolean overloaded;
     private boolean abstraction;
     private boolean abstr;
@@ -26,6 +25,10 @@ public class Constructor extends TypeDeclaration implements Scope, Functional {
     private List<Declaration> members = new ArrayList<Declaration>(3);
     private List<Annotation> annotations = new ArrayList<Annotation>(4);
     
+    public boolean isValueConstructor() {
+        return parameterList==null;
+    }
+
     @Override
     public boolean isAbstract() {
         return abstr;
@@ -35,19 +38,29 @@ public class Constructor extends TypeDeclaration implements Scope, Functional {
         this.abstr = isAbstract;
     }
     
+    public ParameterList getParameterList() {
+        return parameterList;
+    }
+    
     @Override
     public ParameterList getFirstParameterList() {
-        return getParameterLists().get(0);
+        return getParameterList();
     }
 
     @Override
     public List<ParameterList> getParameterLists() {
-        return parameterLists;
+        ParameterList parameterList = getParameterList();
+        if (parameterList==null) {
+            return emptyList();
+        }
+        else {
+            return singletonList(parameterList);
+        }
     }
 
     @Override
     public void addParameterList(ParameterList pl) {
-        parameterLists.add(pl);
+        parameterList = pl;
     }
     
     @Override
@@ -124,6 +137,21 @@ public class Constructor extends TypeDeclaration implements Scope, Functional {
     protected Declaration getMemberOrParameter(String name, 
             List<Type> signature, boolean ellipsis) {
         return getDirectMember(name, signature, ellipsis);
+    }
+    
+    @Override
+    public TypeDeclaration getInheritingDeclaration(
+            Declaration member) {
+        if (member.getContainer().equals(this)) {
+            return null;
+        }
+        else if (getContainer()!=null) {
+            return getContainer()
+                    .getInheritingDeclaration(member);
+        }
+        else {
+            return null;
+        }
     }
     
     @Override
@@ -209,5 +237,15 @@ public class Constructor extends TypeDeclaration implements Scope, Functional {
         }
         return "new " + toStringName() + params;
     }
-        
+    
+    @Override
+    public boolean isAnonymous() {
+        return true;
+    }
+    
+    @Override
+    public boolean isFinal() {
+        return true;
+    }
+    
 }

@@ -6,11 +6,13 @@ import static java.util.Collections.singletonList;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 
 public class Class extends ClassOrInterface implements Functional {
     
     private boolean constructors;
+    private boolean enumerated;
     private boolean abstr;
     private ParameterList parameterList;
     private boolean overloaded;
@@ -23,6 +25,7 @@ public class Class extends ClassOrInterface implements Functional {
     private List<Declaration> overloads;
     private List<Reference> unimplementedFormals = 
             Collections.<Reference>emptyList();
+    private boolean valueConstructor;
 
     public boolean hasConstructors() {
         return constructors;
@@ -32,15 +35,37 @@ public class Class extends ClassOrInterface implements Functional {
         this.constructors = constructors;
     }
     
+    public boolean hasEnumerated() {
+        return enumerated;
+    }
+
+    public void setEnumerated(boolean enumerated) {
+        this.enumerated = enumerated;
+    }
+    
+    @Override
+    public boolean isValueConstructor() {
+        return valueConstructor;
+    }
+    
+    public void setValueConstructor(boolean valueConstructor) {
+        this.valueConstructor = valueConstructor;
+    }
+    
     @Override
     public boolean isAnonymous() {
         return anonymous;
     }
-
+    
     public void setAnonymous(boolean anonymous) {
         this.anonymous = anonymous;
     }
-
+    
+    @Override
+    public boolean isObjectClass() {
+        return anonymous;
+    }
+    
     /**
      * Return true if we have are anonymous and have a name 
      * which is not system-generated. Currently only object 
@@ -228,68 +253,68 @@ public class Class extends ClassOrInterface implements Functional {
     
     @Override
     boolean isAnything() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Anything");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Anything");
     }
     
     @Override
     boolean isObject() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Object");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Object");
     }
     
     @Override
     boolean isNull() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Null");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Null");
     }
 
     @Override
     public boolean isBasic() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Basic");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Basic");
     }
 
     @Override
     public boolean isBoolean() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Boolean");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Boolean");
     }
 
     @Override
     public boolean isString() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::String");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::String");
     }
 
     @Override
     public boolean isCharacter() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Character");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Character");
     }
 
     @Override
     public boolean isFloat() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Float");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Float");
     }
 
     @Override
     public boolean isInteger() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Integer");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Integer");
     }
 
     @Override
     public boolean isByte() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Byte");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Byte");
     }
 
     @Override
     public boolean isTuple() {
-        return getQualifiedNameString()
-                .equals("ceylon.language::Tuple");
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Tuple");
     }
     
     @Override
@@ -375,5 +400,5 @@ public class Class extends ClassOrInterface implements Functional {
         }
         return "class " + toStringName() + params;
     }
-    
+
 }

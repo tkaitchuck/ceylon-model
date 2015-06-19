@@ -160,7 +160,10 @@ public class Type extends Reference {
         checkDepth();
         incDepth();
         try {
-            if (isNothing()) {
+            if (isUnknown() || type.isUnknown()) {
+                return this==type;
+            }
+            else if (isNothing()) {
                 return type.isNothing();
             }
             else if (type.isNothing()) {
@@ -321,6 +324,9 @@ public class Type extends Reference {
                         if (qt!=tqt) {
                             return false;
                         }
+                    }
+                    else if (qt.isUnknown() || tqt.isUnknown()) {
+                        return false;
                     }
                     else {
                         Scope odc = otherDec.getContainer();
@@ -496,11 +502,14 @@ public class Type extends Reference {
             if (isNothing()) {
                 return true;
             }
-            else if (type.isNothing()) {
-                return false;
-            }
             else if (type.isAnything()) {
                 return true;
+            }
+            else if (isUnknown() || type.isUnknown()) {
+                return this==type;
+            }
+            else if (type.isNothing()) {
+                return false;
             }
             else if (isAnything()) {
                 return false;
@@ -589,18 +598,16 @@ public class Type extends Reference {
                             supertype.trueQualifyingType();
                     Type tqt =
                             type.trueQualifyingType();
-                    if (stqt==null) {
-                        if (tqt!=null) {
-                            //probably extraneous!
+                    if (stqt==null || tqt==null) {
+                        if (tqt!=stqt) {
                             return false;
                         }
                     }
+                    else if (tqt.isUnknown() || stqt.isUnknown()) {
+                        return false;
+                    }
                     else {
-                        if (tqt==null) {
-                            //probably extraneous!
-                            return false;
-                        }
-                        else if (!otherDec.isMember()) {
+                        if (!otherDec.isMember()) {
                             //local types with a qualifying typed 
                             //declaration do not need to obtain the
                             //qualifying type's supertype
@@ -949,7 +956,15 @@ public class Type extends Reference {
             if (!otherBound.isExactly(bound)) {
                 return false;
             }
-            //TODO: check enumerated bounds!!!
+            Type otherEnumBound = 
+                    unionOfCaseTypes(otherParam)
+                        .substitute(otherArgs, none);
+            Type enumBound = 
+                    unionOfCaseTypes(param)
+                        .substitute(args, none);
+            if (!otherEnumBound.isExactly(enumBound)) {
+                return false;
+            }
         }
         return true;
     }
@@ -1472,8 +1487,7 @@ public class Type extends Reference {
             if (isWellDefined()) {
                 //now let's call the two most difficult methods
                 //in the whole code base:
-                Type result = 
-                        getPrincipalInstantiation(c);
+                Type result = getPrincipalInstantiation(c);
                 result = getPrincipalInstantiationFromCases(c, result);
                 if (result==null || result.isNothing()) {
                     return null;
@@ -2608,6 +2622,15 @@ public class Type extends Reference {
     private Type getInternalExtendedType() {
         TypeDeclaration dec = getDeclaration();
         Type et = dec.getExtendedType();
+        if (dec.isNative() && !dec.isNativeHeader()) {
+            // Native implementations have the same extended type as
+            // their header, but headers can actually have methods
+            // of their own so we set the extended type to the header
+            Declaration hdr = ModelUtil.getNativeHeader(dec.getContainer(), dec.getName());
+            if (hdr instanceof TypeDeclaration) {
+                et = ((TypeDeclaration)hdr).getType();
+            }
+        }
         if (et==null) {
             return null;
         }
@@ -3314,9 +3337,7 @@ public class Type extends Reference {
                     TypeParameter tp = params.get(i);
                     Type arg = args.get(i);
                     if (isCovariant(tp)) {
-                        Type bound = 
-                                //TODO: BUG, this could
-                                //cause a stack overflow!
+                        Type bound =
                                 intersectionOfSupertypes(tp)
                                     .substitute(this);
                         if (!arg.isSubtypeOf(bound)) {
@@ -4114,13 +4135,30 @@ public class Type extends Reference {
                 //use-site variance is "in", replace the
                 //type parameter with its upper bounds,
                 //throwing away the use-site lower bound
-                //TODO: BUG HERE! This can cause a stack
-                //      when the upper bound involves
-                //      the type parameter covariantly
-                return applyVarianceOverrides(
-                        intersectionOfSupertypes(tp), 
-                        covariant, contravariant, 
-                        overrides);
+                List<Type> bounds = tp.getSatisfiedTypes();
+                List<Type> list = 
+                        new ArrayList<Type>
+                            (bounds.size()+1);
+                for (Type bound: bounds) {
+                    //ignore bounds in which the type 
+                    //parameter itself occurs covariantly
+                    //because they would result in a 
+                    //stack overflow here
+                    //TODO: perhaps we should just 
+                    //      substitute Anything for the
+                    //      type parameter in such bounds,
+                    //      which would be a little more
+                    //      precise
+                    if (!bound.occursCovariantly(tp)) {
+                        Type applied = 
+                                applyVarianceOverrides(
+                                        bound, 
+                                        covariant, contravariant, 
+                                        overrides);
+                        addToIntersection(list, applied, unit);
+                    }
+                }
+                return canonicalIntersection(list, unit);
             }
             else {
                 return type;

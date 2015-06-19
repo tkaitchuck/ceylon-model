@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import com.redhat.ceylon.common.Backend;
+
 /**
  * Represents a named, annotated program element:
  * a class, interface, type parameter, parameter,
@@ -117,7 +119,7 @@ public abstract class Declaration
         if (qualifiedNameAsStringCache == null) {
             String qualifier = getContainer().getQualifiedNameString();
             String name = getName();
-            if (qualifier.isEmpty()) {
+            if (qualifier==null || qualifier.isEmpty()) {
                 qualifiedNameAsStringCache = name; 
             }
             else if (getContainer() instanceof Package) {
@@ -158,14 +160,18 @@ public abstract class Declaration
     }
 
     public boolean isNative() {
-        return getNative() != null;
+        return getNativeBackend() != null;
     }
     
-    public String getNative() {
+    public boolean isNativeHeader() {
+        return Backend.None.nativeAnnotation.equals(getNativeBackend());
+    }
+    
+    public String getNativeBackend() {
     	return nativeBackend;
     }
     
-    public void setNative(String backend) {
+    public void setNativeBackend(String backend) {
     	this.nativeBackend=backend;
     }
 
@@ -404,8 +410,8 @@ public abstract class Declaration
             }
             else if (this.isNative() != that.isNative() ||
                     (this.isNative() && 
-                            !this.getNative()
-                                .equals(that.getNative()))) {
+                            !this.getNativeBackend()
+                                .equals(that.getNativeBackend()))) {
                 return false;
             }
             else if (this instanceof Functional && 
