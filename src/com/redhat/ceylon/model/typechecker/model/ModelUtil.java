@@ -999,14 +999,16 @@ public class ModelUtil {
                 }
             }
         }
-        //now turn the type argument tuple into a
-        //map from type parameter to argument
-        for (int i=0; 
-                i<typeParameters.size() && 
-                i<typeArguments.size(); 
-                i++) {
-            map.put(typeParameters.get(i), 
-                    typeArguments.get(i));
+        if (typeArguments!=null) {
+            //now turn the type argument tuple into a
+            //map from type parameter to argument
+            for (int i=0; 
+                    i<typeParameters.size() && 
+                    i<typeArguments.size(); 
+                    i++) {
+                map.put(typeParameters.get(i), 
+                        typeArguments.get(i));
+            }
         }
         return map;
     }
@@ -2389,13 +2391,31 @@ public class ModelUtil {
         }
         return result;
     }
-
+    
+    /**
+     * Is the given declaration a constructor or singleton
+     * constructor of a toplevel class?
+     * 
+     * Constructors of toplevel classes can be directly
+     * imported into the toplevel namespace of a compilation
+     * unit.
+     */
     public static boolean isToplevelClassConstructor(
-            TypeDeclaration td, Declaration m) {
+            TypeDeclaration td, Declaration dec) {
         return td.isToplevel() && 
-                m instanceof Constructor;
+                (dec instanceof Constructor ||
+                dec instanceof FunctionOrValue && 
+                ((FunctionOrValue) dec).getTypeDeclaration() 
+                        instanceof Constructor);
     }
 
+    /**
+     * Is the given declaration a toplevel anonymous class?
+     * 
+     * Members of toplevel anonymous classes can be directly
+     * imported into the toplevel namespace of a compilation
+     * unit.
+     */
     public static boolean isToplevelAnonymousClass(Scope s) {
         if (s instanceof Class) {
             Class td = (Class) s;

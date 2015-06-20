@@ -12,6 +12,7 @@ import java.util.Objects;
 public class Class extends ClassOrInterface implements Functional {
     
     private boolean constructors;
+    private boolean enumerated;
     private boolean abstr;
     private ParameterList parameterList;
     private boolean overloaded;
@@ -25,6 +26,7 @@ public class Class extends ClassOrInterface implements Functional {
     private List<Declaration> overloads;
     private List<Reference> unimplementedFormals = 
             Collections.<Reference>emptyList();
+    private boolean valueConstructor;
 
     public boolean hasConstructors() {
         return constructors;
@@ -34,15 +36,37 @@ public class Class extends ClassOrInterface implements Functional {
         this.constructors = constructors;
     }
     
+    public boolean hasEnumerated() {
+        return enumerated;
+    }
+
+    public void setEnumerated(boolean enumerated) {
+        this.enumerated = enumerated;
+    }
+    
+    @Override
+    public boolean isValueConstructor() {
+        return valueConstructor;
+    }
+    
+    public void setValueConstructor(boolean valueConstructor) {
+        this.valueConstructor = valueConstructor;
+    }
+    
     @Override
     public boolean isAnonymous() {
         return anonymous;
     }
-
+    
     public void setAnonymous(boolean anonymous) {
         this.anonymous = anonymous;
     }
-
+    
+    @Override
+    public boolean isObjectClass() {
+        return anonymous;
+    }
+    
     /**
      * Return true if we have are anonymous and have a name 
      * which is not system-generated. Currently only object 
@@ -385,5 +409,5 @@ public class Class extends ClassOrInterface implements Functional {
         }
         return "class " + toStringName() + params;
     }
-    
+
 }

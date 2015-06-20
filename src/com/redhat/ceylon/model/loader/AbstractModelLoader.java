@@ -45,9 +45,9 @@ import com.redhat.ceylon.model.loader.model.LazyClass;
 import com.redhat.ceylon.model.loader.model.LazyClassAlias;
 import com.redhat.ceylon.model.loader.model.LazyContainer;
 import com.redhat.ceylon.model.loader.model.LazyElement;
+import com.redhat.ceylon.model.loader.model.LazyFunction;
 import com.redhat.ceylon.model.loader.model.LazyInterface;
 import com.redhat.ceylon.model.loader.model.LazyInterfaceAlias;
-import com.redhat.ceylon.model.loader.model.LazyFunction;
 import com.redhat.ceylon.model.loader.model.LazyModule;
 import com.redhat.ceylon.model.loader.model.LazyPackage;
 import com.redhat.ceylon.model.loader.model.LazyTypeAlias;
@@ -108,6 +108,7 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
     private static final String CEYLON_PACKAGE_ANNOTATION = "com.redhat.ceylon.compiler.java.metadata.Package";
     public static final String CEYLON_IGNORE_ANNOTATION = "com.redhat.ceylon.compiler.java.metadata.Ignore";
     private static final String CEYLON_CLASS_ANNOTATION = "com.redhat.ceylon.compiler.java.metadata.Class";
+    private static final String CEYLON_ENUMERATED_ANNOTATION = "com.redhat.ceylon.compiler.java.metadata.Enumerated";
     //private static final String CEYLON_CONSTRUCTOR_ANNOTATION = "com.redhat.ceylon.compiler.java.metadata.Constructor";
     //private static final String CEYLON_PARAMETERLIST_ANNOTATION = "com.redhat.ceylon.compiler.java.metadata.ParameterList";
     public static final String CEYLON_NAME_ANNOTATION = "com.redhat.ceylon.compiler.java.metadata.Name";
@@ -949,6 +950,7 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
     private static Declaration selectTypeOrSetter(Declaration member, boolean wantsSetter) {
         // if we found a type or a method/value we're good to go
         if (member instanceof ClassOrInterface
+                || member instanceof Constructor
                 || member instanceof Function) {
             return member;
         }
@@ -1943,8 +1945,9 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
             if (constructorName != null 
                     && !constructorName.isEmpty()) {
                 Declaration constructor = alias.getExtendedType().getDeclaration().getMember(constructorName, null, false);
-                if (constructor instanceof TypeDeclaration) {
-                    alias.setConstructor((TypeDeclaration)constructor);
+                if (constructor instanceof FunctionOrValue
+                        && ((FunctionOrValue)constructor).getTypeDeclaration() instanceof Constructor) {
+                    alias.setConstructor(((FunctionOrValue)constructor).getTypeDeclaration());
                 } else {
                     logError("class aliased constructor " + constructorName + " which is no longer a constructor of " + alias.getExtendedType().getDeclaration().getQualifiedNameString());
                 }
@@ -2014,7 +2017,16 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         if (klass instanceof LazyClass) {
             constructor = ((LazyClass)klass).getConstructor();
         }
-            
+        
+        // Set up enumerated constructors before looking at getters,
+        // because the type of the getter is the constructor's type
+        Boolean hasConstructors = hasConstructors(classMirror);
+        if (hasConstructors != null && hasConstructors) {
+            for (MethodMirror ctor : getClassConstructors(classMirror)) {
+                addConstructor((Class)klass, classMirror, ctor);
+            }
+        }
+        
         // Turn a list of possibly overloaded methods into a map
         // of lists that contain methods with the same name
         Map<String, List<MethodMirror>> methods = new LinkedHashMap<String, List<MethodMirror>>();
@@ -2119,14 +2131,6 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
                 && !isDefaultNamedCtor(classMirror, constructor)
                 && (!(klass instanceof LazyClass) || !((LazyClass)klass).isAnonymous()))
             setParameters((Class)klass, classMirror, constructor, isCeylon, klass);
-        
-        Boolean hasConstructors = hasConstructors(classMirror);
-        if (hasConstructors != null && hasConstructors) {
-            ((Class)klass).setConstructors(true);
-            for (MethodMirror ctor : getClassConstructors(classMirror)) {
-                addConstructor((Class)klass, classMirror, ctor);
-            }
-        }
         
         // Now marry-up attributes and parameters)
         if (klass instanceof Class) {
@@ -2250,7 +2254,7 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
     }
 
     private void addConstructor(Class klass, ClassMirror classMirror, MethodMirror ctor) {
-        boolean isCeylon = (classMirror.getAnnotation(CEYLON_CEYLON_ANNOTATION) != null);
+        boolean isCeylon = classMirror.getAnnotation(CEYLON_CEYLON_ANNOTATION) != null;
         Constructor constructor = new Constructor();
         constructor.setName(getCtorName(ctor));
         constructor.setContainer(klass);
@@ -2259,8 +2263,35 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         constructor.setExtendedType(klass.getType());
         setDeclarationVisibilityAndDeprecation(constructor, ctor, ctor, classMirror, isCeylon);
         setAnnotations(constructor, ctor);
-        setParameters(constructor, classMirror, ctor, true, klass);
         klass.addMember(constructor);
+        if (ctor.getAnnotation(CEYLON_ENUMERATED_ANNOTATION) != null) {
+            klass.setEnumerated(true);
+            Value v = new Value();
+            v.setName(constructor.getName());
+            v.setType(constructor.getType());
+            v.setContainer(klass);
+            v.setScope(klass);
+            v.setUnit(klass.getUnit());
+            v.setVisibleScope(constructor.getVisibleScope());
+            v.setShared(constructor.isShared());
+            v.setDeprecated(constructor.isDeprecated());
+            klass.addMember(v);
+        }
+        else {
+            setParameters(constructor, classMirror, ctor, true, klass);
+            klass.setConstructors(true);
+            Function f = new Function();
+            f.setName(constructor.getName());
+            f.setType(constructor.getType());
+            f.addParameterList(constructor.getParameterList());
+            f.setContainer(klass);
+            f.setScope(klass);
+            f.setUnit(klass.getUnit());
+            f.setVisibleScope(constructor.getVisibleScope());
+            f.setShared(constructor.isShared());
+            f.setDeprecated(constructor.isDeprecated());
+            klass.addMember(f);
+        }
     }
     
     private boolean isMethodOverloaded(List<MethodMirror> methodMirrors) {
@@ -2293,7 +2324,8 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
                 continue;
             if(methodMirror.isStaticInit())
                 continue;
-            if(isCeylon && methodMirror.isStatic())
+            if(isCeylon && methodMirror.isStatic()
+                    && methodMirror.getAnnotation(CEYLON_ENUMERATED_ANNOTATION) == null)
                 continue;
             // FIXME: temporary, because some private classes from the jdk are
             // referenced in private methods but not available
@@ -2809,6 +2841,7 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
                 "field '"+value.getName()+"'", klass);
         if (value.isEnumValue()) {
             Class enumValueType = new Class();
+            enumValueType.setValueConstructor(true);
             enumValueType.setJavaEnum(true);
             enumValueType.setAnonymous(true);
             enumValueType.setExtendedType(type);
@@ -2981,7 +3014,7 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
                 decl.setDefault(true);
             }
         }
-        decl.setStaticallyImportable(methodMirror.isStatic());
+        decl.setStaticallyImportable(methodMirror.isStatic() && methodMirror.getAnnotation(CEYLON_ENUMERATED_ANNOTATION) == null);
 
         decl.setActualCompleter(this);
     }

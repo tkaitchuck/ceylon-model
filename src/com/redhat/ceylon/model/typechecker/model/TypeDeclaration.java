@@ -31,6 +31,7 @@ public abstract class TypeDeclaration extends Declaration
     private boolean inconsistentType;
     private boolean dynamic;
 	private boolean sealed;
+    private List<TypedDeclaration> caseValues;
 
 	/** 
 	 * true if the type arguments of this type are not 
@@ -89,6 +90,14 @@ public abstract class TypeDeclaration extends Declaration
     
     public boolean isFinal() {
     	return false;
+    }
+    
+    public boolean isObjectClass() {
+        return false;
+    }
+
+    public boolean isValueConstructor() {
+        return false;
     }
 
     @Override
@@ -496,9 +505,9 @@ public abstract class TypeDeclaration extends Declaration
             //looking for, return it
             //TODO: should also return it if we're 
             //      calling from local scope!
-            if (signature!=null && dec.isAbstraction()){
-                //look for a supertype declaration that matches 
-                //the given signature better
+            if (signature!=null && dec.isAbstraction()) {
+                //look for a supertype declaration that 
+                //matches the given signature better
                 SupertypeDeclaration sd = 
                         getSupertypeDeclaration(name, 
                                 signature, variadic);
@@ -601,8 +610,7 @@ public abstract class TypeDeclaration extends Declaration
         if (container!=null && container.equals(this)) {
             return null;
         }
-        else if (!(this instanceof Constructor) && 
-                isInheritedFromSupertype(member)) {
+        else if (isInheritedFromSupertype(member)) {
             return this;
         }
         else if (getContainer()!=null) {
@@ -679,7 +687,8 @@ public abstract class TypeDeclaration extends Declaration
                 if (dm!=null && 
                         dm.isShared() && 
                         isResolvable(dm)) {
-                    // only accept abstractions if we don't have a signature
+                    // only accept abstractions if we 
+                    // don't have a signature
                     return !dm.isAbstraction() || 
                             signature == null;
                 }
@@ -720,8 +729,7 @@ public abstract class TypeDeclaration extends Declaration
         //this works by finding the most-specialized supertype
         //that defines the member
         Type type = getType();
-        Type st = 
-                type.getSupertype(new ExactCriteria());
+        Type st = type.getSupertype(new ExactCriteria());
         if (st == null) {
             //try again, ignoring the given signature
             st = type.getSupertype(new LooseCriteria());
@@ -1041,6 +1049,14 @@ public abstract class TypeDeclaration extends Declaration
 
     public boolean isSequence() {
         return false;
+    }
+    
+    public List<TypedDeclaration> getCaseValues() {
+        return caseValues;
+    }
+
+    public void setCaseValues(List<TypedDeclaration> caseValues) {
+        this.caseValues = caseValues;
     }
 
 }
