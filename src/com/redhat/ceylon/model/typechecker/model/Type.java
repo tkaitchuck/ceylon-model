@@ -15,6 +15,7 @@ import static com.redhat.ceylon.model.typechecker.model.ModelUtil.typeParameters
 import static com.redhat.ceylon.model.typechecker.model.ModelUtil.union;
 import static com.redhat.ceylon.model.typechecker.model.ModelUtil.unionOfCaseTypes;
 import static com.redhat.ceylon.model.typechecker.model.SiteVariance.IN;
+import static com.redhat.ceylon.model.typechecker.model.SiteVariance.OPAQUE;
 import static com.redhat.ceylon.model.typechecker.model.SiteVariance.OUT;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
@@ -82,6 +83,17 @@ public class Type extends Reference {
         }
         else {
             return override==IN;
+        }
+    }
+    
+    public boolean isOpaque(TypeParameter param) {
+        SiteVariance override = 
+                varianceOverrides.get(param);
+        if (override==null) {
+            return param.isOpaque();
+        }
+        else {
+            return override==OPAQUE;
         }
     }
     

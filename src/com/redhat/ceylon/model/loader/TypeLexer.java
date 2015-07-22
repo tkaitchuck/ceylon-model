@@ -11,7 +11,8 @@ public class TypeLexer {
     public final static int DBLCOLON = DOT + 1;// :
     public final static int EOT = DBLCOLON + 1;
     public final static int WORD = EOT + 1;// anything else
-    public final static int OUT = WORD + 1; // out
+    public final static int OPAQUE = WORD + 1; // opaque
+    public final static int OUT = OPAQUE + 1; // out
     public final static int IN = OUT + 1; // in
     public final static int OPEN_SQ = IN + 1;// [
     public final static int CLOSE_SQ = OPEN_SQ + 1;// ]
@@ -87,6 +88,14 @@ public class TypeLexer {
                     && type[index + 2] == 't'
                     && type[index + 3] == ' ')
             token = OUT; 
+            if((index + 6) < type.length
+                    && type[index + 1] == 'p'
+                    && type[index + 2] == 'a'
+                    && type[index + 3] == 'q'
+                    && type[index + 4] == 'u'
+                    && type[index + 5] == 'e'
+                    && type[index + 6] == ' ')
+            token = OPAQUE;  
             break;
         case 'i':
             if((index + 2) < type.length
@@ -177,6 +186,7 @@ public class TypeLexer {
         case DBLCOLON   : return "DBLCOLON";
         case EOT   : return "EOT";
         case WORD  : return "WORD";
+        case OPAQUE  : return "OPAQUE";
         case OUT  : return "OUT";
         case IN : return "IN";
         case OPEN_SQ: return "OPEN_SQ";
@@ -211,6 +221,8 @@ public class TypeLexer {
             index += 3;
         } else if(lookingAt(OUT)){
             index += 4;
+        } else if(lookingAt(OPAQUE)){
+            index += 7;
         } else if(lookingAt(THIN_ARROW)){
             index += 2;
         } else if(lookingAt(WORD)){

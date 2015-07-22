@@ -10,6 +10,7 @@ public class TypeParameter extends TypeDeclaration {
 
     private boolean covariant;
     private boolean contravariant;
+    private boolean opaque;
     private Declaration declaration;
     private TypeDeclaration selfTypedDeclaration;
     private Type defaultTypeArgument;
@@ -49,6 +50,14 @@ public class TypeParameter extends TypeDeclaration {
 
     public void setContravariant(boolean contravariant) {
         this.contravariant = contravariant;
+    }
+    
+    public boolean isOpaque() {
+        return opaque;
+    }
+
+    public void setOpaque(boolean opaque) {
+        this.opaque = opaque;
     }
     
     public boolean isTypeConstructor() {

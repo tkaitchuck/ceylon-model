@@ -692,7 +692,7 @@ public class TypeParser {
     /**
      * Spec says:
      * <blockquote><pre>
-     * Variance: ("out" | "in")?
+     * Variance: ("out" | "in" | "opaque")?
      * </blockquote></pre>
      * Which is what we do, but by updating the given part.
      */
@@ -701,8 +701,12 @@ public class TypeParser {
         if(lexer.lookingAt(TypeLexer.OUT)){
             variance = SiteVariance.OUT;
             lexer.eat();
-        }else if(lexer.lookingAt(TypeLexer.IN)){
+        } else if(lexer.lookingAt(TypeLexer.IN)){
             variance = SiteVariance.IN;
+            lexer.eat();
+        }
+        else if(lexer.lookingAt(TypeLexer.OPAQUE)){
+            variance = SiteVariance.OPAQUE;
             lexer.eat();
         }
         // lazy allocation
