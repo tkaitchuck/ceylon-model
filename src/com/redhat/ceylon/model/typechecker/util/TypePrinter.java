@@ -48,7 +48,11 @@ public class TypePrinter {
             boolean printTypeParameterDetail,
             boolean printQualifyingType,
             boolean escapeLowercased) {
-        this(printAbbreviated, printTypeParameters, printTypeParameterDetail, printQualifyingType, escapeLowercased, false, false);
+        this(printAbbreviated, 
+                printTypeParameters, 
+                printTypeParameterDetail, 
+                printQualifyingType, 
+                escapeLowercased, false, false);
     }
     
     public TypePrinter(boolean printAbbreviated, 
@@ -129,7 +133,12 @@ public class TypePrinter {
                             u.getSequentialElementType(pt);
                     String etn = print(et, unit);
                     int len = u.getHomogeneousTupleLength(pt);
-                    return etn +  "[" + len + "]";
+                    if (isPrimitiveAbbreviatedType(et)) {
+                        return etn + "[" + len + "]";
+                    }
+                    else {
+                        return "<" + etn + ">[" + len + "]";
+                    }
                 }
                 if (abbreviateSequential(pt)) {
                     Type it = u.getIteratedType(pt);
@@ -155,9 +164,9 @@ public class TypePrinter {
                 if (abbreviateIterable(pt)) {
                     Type it = u.getIteratedType(pt);
                     Type nt = pt.getTypeArgumentList().get(1);
-                    if (it.isNothing() && !nt.isNothing()) {
+                    /*if (it.isNothing() && !nt.isNothing()) {
                     	return "{}";
-                    }
+                    }*/
                     String itn = print(it, unit);
                     String many = nt.isNothing() ? "+" : "*";
                     if (isPrimitiveAbbreviatedType(it) || 
@@ -209,7 +218,8 @@ public class TypePrinter {
                     }
                 }
                 if (abbreviateTuple(pt)) {
-                    String elemTypes = getTupleElementTypeNames(pt, unit);
+                    String elemTypes = 
+                            getTupleElementTypeNames(pt, unit);
                     if (elemTypes!=null) {
                         return "[" + elemTypes + "]";
                     }

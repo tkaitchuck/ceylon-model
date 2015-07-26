@@ -42,7 +42,11 @@ public class Interface extends ClassOrInterface {
         if (dec.isAnything() || dec.isObject()) {
             return true;
         }
-        if (dec instanceof Interface && equals(dec)) {
+        else if (dec instanceof Class) {
+            //interface can't inherit any other class
+            return false;
+        }
+        else if (dec instanceof Interface && equals(dec)) {
             return true;
         }
         else {
@@ -75,6 +79,21 @@ public class Interface extends ClassOrInterface {
 
     public void setCompanionClassNeeded(Boolean companionClassNeeded) {
         this.companionClassNeeded = companionClassNeeded;
+    }
+    
+    @Override
+    public boolean isEmptyType() {
+        return isEmpty();
+    }
+    
+    @Override
+    public boolean isSequentialType() {
+        return isSequential() || isSequence() || isEmpty();
+    }
+    
+    @Override
+    public boolean isSequenceType() {
+        return isSequence();
     }
     
     @Override

@@ -217,13 +217,11 @@ public class LazyFunction extends Function implements LazyElement, LocalDeclarat
 
     @Override
     public String getNativeBackend() {
-        load();
         return super.getNativeBackend();
     }
     
     @Override
     public void setNativeBackend(String backend) {
-        load();
         super.setNativeBackend(backend);
     }
 
@@ -290,7 +288,7 @@ public class LazyFunction extends Function implements LazyElement, LocalDeclarat
 
     @Override
     public Unit getUnit() {
-        load();
+//        load();
         return super.getUnit();
     }
 

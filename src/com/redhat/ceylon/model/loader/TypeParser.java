@@ -394,11 +394,12 @@ public class TypeParser {
      */
     class TypeList {
         
-        public TypeList(List<Type> types, boolean variadic, boolean atLeastOne) {
+        public TypeList(List<Type> types, boolean variadic, boolean atLeastOne, int defaulted) {
             super();
             this.types = types;
             this.variadic = variadic;
             this.atLeastOne = atLeastOne;
+            this.defaulted = defaulted;
         }
         public Type getFirst() {
             return types.get(0);
@@ -406,6 +407,14 @@ public class TypeParser {
         List<Type> types;
         boolean variadic;
         boolean atLeastOne;
+        /**
+         * The number of defaulted types.
+         * For instance, the types <code>A,B,C,D,E</code> with <code>defaulted = 3</code>
+         * signify the type list <code>A,B,C=,D=,E=</code>.
+         * <p>
+         * Variadics are not counted as defaulted.
+         */
+        int defaulted;
         Type getLast() {
             return types.get(types.size()-1);
         }
@@ -413,7 +422,7 @@ public class TypeParser {
         Type asTuple() {
             final Type result;
             if (types.size() == 0) {
-                result = parseEmptyType();
+                result = unit.getEmptyType();
             } else {
                 final Type sequentialType;
                 if (variadic) {
@@ -429,14 +438,56 @@ public class TypeParser {
                     result = sequentialType;
                 } else {
                     Part part = new Part();
-                    Type union = getLast();
+                    // if we're variadic we put the element type there because we skip it below
+                    // if we're not variadic we are not going to skip it so let's not union it with itself
+                    Type union = variadic ? getLast() : null;
                     Type tupleType = sequentialType;
+                    // A,B= 
+                    // union = null
+                    // tupleType = []
+                    // t = B
+                    // union = B
+                    // tupleType = [B]
+                    // tupleType = [B]|[]
+                    // t = A
+                    // union = A|B
+                    // tupleType = [A,[B]|[]]
+
+                    // A=,B= 
+                    // union = null
+                    // tupleType = []
+                    // t = B
+                    // union = B
+                    // tupleType = [B]
+                    // tupleType = [B]|[]
+                    // t = A
+                    // union = A|B
+                    // tupleType = [A,[B]|[]]
+                    // tupleType = [A,[B]|[]]|[]
+
+                    // A=,B* 
+                    // union = B
+                    // tupleType = [B*]
+                    // t = A
+                    // union = A|B
+                    // tupleType = [A,[B*]]
+                    // tupleType = [A,[B*]]|[]
+
+                    int makeDefaulted = defaulted;
                     for (int ii  = types.size()-(variadic? 2 : 1); ii >= 0; ii--) {
                         Type t = types.get(ii);
-                        union = ModelUtil.unionType(union, t, unit);
+                        // FIXME: subtyping in the type parser may cause issues
+                        if(union != null) // any second element (variadic or not)
+                            union = ModelUtil.unionType(union, t, unit);
+                        else
+                            union = t; // any first element
                         part.parameters = Arrays.asList(union, t, tupleType);
                         part.name = "Tuple";
                         tupleType = loadType("ceylon.language", "ceylon.language.Tuple", part, null);
+                        if(makeDefaulted > 0){
+                            makeDefaulted--;
+                            tupleType = union(Arrays.asList(unit.getEmptyType(), tupleType), unit);
+                        }
                     }
                     result = tupleType;
                 }
@@ -452,16 +503,26 @@ public class TypeParser {
      * DefaultedType: Type "="?
      * VariadicType: UnionType ("*" | "+")
      * </blockquote></pre>
-     * We don't care about defaulted types though.
      */
     private TypeList parseTypeList() {
         ArrayList<Type> types= new ArrayList<>();
+        int defaulted = 0;
         types.add(parseType());
+        if (lexer.lookingAt(TypeLexer.EQ)){
+            defaulted++;
+            lexer.eat(TypeLexer.EQ);
+        }
         while(lexer.lookingAt(TypeLexer.COMMA)){
             lexer.eat(TypeLexer.COMMA);
             // XXX When the last type is matching VariadicType
             // we should be using parseUnionType, not parseType().
             types.add(parseType());
+            if (lexer.lookingAt(TypeLexer.EQ)){
+                lexer.eat(TypeLexer.EQ);
+                defaulted++;
+            } else if (defaulted > 0 && !lexer.lookingAt(TypeLexer.STAR)){
+                throw new TypeParserException("Non-defaulted argument after defaulted one: "+lexer.index);
+            }
         }
         boolean variadic;
         boolean atLeastOne;
@@ -473,11 +534,14 @@ public class TypeParser {
             lexer.eat(TypeLexer.PLUS);
             variadic = true;
             atLeastOne = true;
+            if (defaulted > 0){
+                throw new TypeParserException("Nonempty variadic argument after defaulted one: "+lexer.index);
+            }
         } else {
             variadic = false;
             atLeastOne = false;
         }
-        return new TypeList(types, variadic, atLeastOne);
+        return new TypeList(types, variadic, atLeastOne, defaulted);
     }
 
     /**

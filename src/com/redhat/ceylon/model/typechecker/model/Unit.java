@@ -873,7 +873,7 @@ public class Unit {
     
     public boolean isNonemptyIterableType(Type type) {
     	Type ft = getFirstType(type);
-    	return ft!=null && ft.isNothing();
+    	return ft!=null && ft.isExactlyNothing();
     }
 
     public Type getSetElementType(Type type) {
@@ -892,7 +892,19 @@ public class Unit {
         Type st = type.getSupertype(sd);
         if (st!=null && 
                 st.getTypeArguments().size()==1) {
-            return st.getTypeArgumentList().get(0);
+            Type et = st.getTypeArgumentList().get(0);
+            if (type.isTuple() && et.isUnion()) {
+                //total hack to accommodate the fact that
+                //tuple types are created with unsimplified
+                //unions
+                Unit unit = et.getDeclaration().getUnit();
+                List<Type> types = new ArrayList<Type>();
+                for (Type ct: et.getCaseTypes()) {
+                    addToUnion(types, ct);
+                }
+                return union(types, unit).getType();
+            }
+            return et;
         }
         else {
             return null;
@@ -914,11 +926,6 @@ public class Unit {
         return getNonemptyType(getDefiniteType(pt));
     }
     
-    public boolean isEntryType(Type pt) {
-        return pt.getDeclaration()
-                .inherits(getEntryDeclaration());
-    }
-    
     public boolean isIterableType(Type pt) {
         return pt.getDeclaration()
                 .inherits(getIterableDeclaration());
@@ -929,24 +936,25 @@ public class Unit {
                 .inherits(getUsableDeclaration());
     }
     
-    public boolean isSequentialType(Type pt) {
+    public boolean isEntryType(Type pt) {
         return pt.getDeclaration()
-                .inherits(getSequentialDeclaration());
+                .inherits(getEntryDeclaration());
+    }
+    
+    public boolean isSequentialType(Type pt) {
+        return pt.getDeclaration().isSequentialType();
     }
     
     public boolean isSequenceType(Type pt) {
-        return pt.getDeclaration()
-                .inherits(getSequenceDeclaration());
+        return pt.getDeclaration().isSequenceType();
     }
     
     public boolean isEmptyType(Type pt) {
-        return pt.getDeclaration()
-                .inherits(getEmptyDeclaration());
+        return pt.getDeclaration().isEmptyType();
     }
     
     public boolean isTupleType(Type pt) {
-        return pt.getDeclaration()
-                .inherits(getTupleDeclaration());
+        return pt.getDeclaration().isTupleType();
     }
     
     public boolean isOptionalType(Type pt) {
@@ -986,8 +994,7 @@ public class Unit {
     public Type denotableType(Type type) {
     	if (type!=null) {
     		if (type.isUnion()) {
-    		    List<Type> cts = 
-                        type.getCaseTypes();
+    		    List<Type> cts = type.getCaseTypes();
                 List<Type> list = 
                         new ArrayList<Type>
                             (cts.size()+1);
@@ -998,8 +1005,7 @@ public class Unit {
                 return union(list, this);
     		}
             if (type.isIntersection()) {
-                List<Type> sts = 
-                        type.getSatisfiedTypes();
+                List<Type> sts = type.getSatisfiedTypes();
                 List<Type> list = 
                         new ArrayList<Type>
                             (sts.size()+1);
@@ -1022,8 +1028,7 @@ public class Unit {
     		    return type.getSupertype(ed);
     		}
     		if (dec instanceof Class && dec.isAnonymous()) {
-    			List<Type> sts = 
-    			        dec.getSatisfiedTypes();
+    			List<Type> sts = dec.getSatisfiedTypes();
     			List<Type> list = 
     			        new ArrayList<Type>
     			            (sts.size()+1);
@@ -1062,17 +1067,14 @@ public class Unit {
                             i<typeParamList.size() && 
                             i<typeArgList.size(); 
                             i++) {
-                        Type at = 
-                                typeArgList.get(i);
+                        Type at = typeArgList.get(i);
                         TypeParameter tp = 
                                 typeParamList.get(i);
                         typeArguments.add(tp.isCovariant() ? 
                                 denotableType(at) : at);
                     }
                     Type qt = type.getQualifyingType();
-                    Type dt = 
-                            dec.appliedType(qt, 
-                                    typeArguments);
+                    Type dt = dec.appliedType(qt, typeArguments);
                     dt.setUnderlyingType(type.getUnderlyingType());
                     dt.setVarianceOverrides(type.getVarianceOverrides());
                     dt.setTypeConstructor(type.isTypeConstructor());

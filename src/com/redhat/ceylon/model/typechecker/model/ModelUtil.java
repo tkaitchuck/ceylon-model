@@ -118,7 +118,9 @@ public class ModelUtil {
         while (!(scope instanceof Package)) {
             if (scope instanceof ClassOrInterface) {
                 if (foundInner) {
-                    return ((ClassOrInterface) scope).getType();
+                    ClassOrInterface ci = 
+                            (ClassOrInterface) scope;
+                    return ci.getType();
                 }
                 else {
                     foundInner = true;
@@ -168,7 +170,7 @@ public class ModelUtil {
             return true;
         }
         else {
-            return  !d.isOverloaded() || d.isAbstraction();
+            return !d.isOverloaded() || d.isAbstraction();
         }
     }
     
@@ -182,7 +184,8 @@ public class ModelUtil {
     static boolean hasMatchingSignature(
             Declaration dec, 
             List<Type> signature, boolean ellipsis) {
-        return hasMatchingSignature(dec, signature, ellipsis, true);
+        return hasMatchingSignature(dec, 
+                signature, ellipsis, true);
     }
     
     static boolean hasMatchingSignature(
@@ -200,12 +203,10 @@ public class ModelUtil {
             }
             Functional f = (Functional) dec;
             Unit unit = dec.getUnit();
-            List<ParameterList> pls = 
-                    f.getParameterLists();
+            List<ParameterList> pls = f.getParameterLists();
             if (pls!=null && !pls.isEmpty()) {
                 ParameterList pl = pls.get(0);
-                List<Parameter> params = 
-                        pl.getParameters();
+                List<Parameter> params = pl.getParameters();
                 int size = params.size();
                 boolean hasSeqParam = 
                         pl.hasSequencedParameter();
@@ -238,9 +239,10 @@ public class ModelUtil {
                     }
                 }
                 if (hasSeqParam) {
+                    FunctionOrValue model = 
+                            params.get(size).getModel();
                     Type pdt = 
-                            params.get(size).getModel()
-                            .appliedReference(null, 
+                            model.appliedReference(null, 
                                     NO_TYPE_ARGS)
                             .getFullType();
                     if (pdt==null || 
@@ -248,15 +250,15 @@ public class ModelUtil {
                                 .isEmpty()) {
                         return false;
                     }
-                    //Note: don't use Unit.getIterableType() because this
-                    //      gets called from model loader out-of-phase
+                    //Note: don't use Unit.getIterableType() 
+                    //      because this gets called from 
+                    //      model loader out-of-phase
                     Type ipdt = 
                             pdt.getTypeArgumentList()
                                 .get(0);  
                     for (int i=size; i<sigSize; i++) {
                         if (spread && i==sigSize-1) {
-                            Type sdt = 
-                                    signature.get(i);
+                            Type sdt = signature.get(i);
                             Type isdt = 
                                     unit.getIteratedType(sdt);
                             if (!matches(isdt, ipdt, unit)) {
@@ -264,8 +266,7 @@ public class ModelUtil {
                             }
                         }
                         else {
-                            Type sdt = 
-                                    signature.get(i);
+                            Type sdt = signature.get(i);
                             if (!matches(sdt, ipdt, unit)) {
                                 return false;
                             }
@@ -300,19 +301,15 @@ public class ModelUtil {
             return false;
         }
         //Ignore optionality for resolving overloads, since
-        //all Java parameters are treated as optional
-        //Except in the case of primitive parameters
-        Type nvt = 
-                unit.getNullValueDeclaration()
-                    .getType();
+        //all Java parameters are treated as optional,
+        //except primitive-typed parameters
+        Type nvt = unit.getNullType();
         if (nvt.isSubtypeOf(argType) && 
                 !nvt.isSubtypeOf(paramType)) {
             return false; //only for primitives
         }
-        Type defParamType = 
-                unit.getDefiniteType(paramType);
-        Type defArgType = 
-                unit.getDefiniteType(argType);
+        Type defParamType = unit.getDefiniteType(paramType);
+        Type defArgType = unit.getDefiniteType(argType);
         Type nt = unit.getNullType();
         if (defArgType.isSubtypeOf(nt)) {
             return true;
@@ -342,10 +339,10 @@ public class ModelUtil {
             List<Type> signature) {
         if (d instanceof Functional && 
             r instanceof Functional) {
-            List<ParameterList> dpls = 
-                    ((Functional) d).getParameterLists();
-            List<ParameterList> rpls = 
-                    ((Functional) r).getParameterLists();
+            Functional df = (Functional) d;
+            Functional rf = (Functional) r;
+            List<ParameterList> dpls = df.getParameterLists();
+            List<ParameterList> rpls = rf.getParameterLists();
             if (dpls!=null && !dpls.isEmpty() && 
                     rpls!=null && !rpls.isEmpty()) {
                 ParameterList dpls0 = dpls.get(0);
@@ -497,14 +494,16 @@ public class ModelUtil {
                 underlyingTypeCoercionScoreB) {
             if (underlyingTypeCoercionScoreA > 0 && 
                     underlyingTypeCoercionScoreB > 0) {
-                // both truncations, prefer the smaller truncation
+                // both truncations, prefer the smaller 
+                // truncation
                 if (underlyingTypeCoercionScoreA > 
                 underlyingTypeCoercionScoreB) {
                     return true;
                 }
             }
             else if(underlyingTypeCoercionScoreA > 0) {
-                // A is a truncation, B is a widening, prefer widening
+                // A is a truncation, B is a widening, 
+                // prefer widening
                 return true;
             }
             else if(underlyingTypeCoercionScoreA == 0) {
@@ -512,16 +511,18 @@ public class ModelUtil {
                 return false;
             }
             else if(underlyingTypeCoercionScoreB == 0) {
-                // B is a perfect match but A is not, so it's worse
+                // B is a perfect match but A is not, 
+                // so it's worse
                 return true;
             }
             else if(underlyingTypeCoercionScoreB > 0) {
-                // A is a widening, B is a truncation, so it's not worse
+                // A is a widening, B is a truncation, 
+                // so it's not worse
                 return false;
             }
             else {
-                // A is a widening and B is a widening too, A is worse than B
-                // if it widens more than B
+                // A is a widening and B is a widening too, 
+                // A is worse than B if it widens more than B
                 return underlyingTypeCoercionScoreA < 
                         underlyingTypeCoercionScoreB;
             }
@@ -592,9 +593,11 @@ public class ModelUtil {
     }
 
     /**
-     * Returns 0 of there's no coercion, > 0 if we have to truncate the argument type to fit the param type,
-     * the higher for the worse truncation, or < 0 if we have to widen the argument type to fit the param
-     * type, the lower for the worse widening.
+     * Returns 0 of there's no coercion, > 0 if we have to 
+     * truncate the argument type to fit the param type,
+     * the higher for the worse truncation, or < 0 if we 
+     * have to widen the argument type to fit the param type, 
+     * the lower for the worse widening.
      */
     private static int getCoercionScore(
             Type argumentType, 
@@ -662,11 +665,11 @@ public class ModelUtil {
             return 2;
         }
         if (underlyingType.equals("int") || 
-                underlyingType.equals("double")) {
+            underlyingType.equals("double")) {
             return 1;
         }
         if (underlyingType.equals("short") || 
-                underlyingType.equals("float")) {
+            underlyingType.equals("float")) {
             return 0;
         }
         return 0;
@@ -675,10 +678,10 @@ public class ModelUtil {
     static boolean strictlyBetterMatch(Declaration d, Declaration r) {
         if (d instanceof Functional && 
             r instanceof Functional) {
-            List<ParameterList> dpls = 
-                    ((Functional) d).getParameterLists();
-            List<ParameterList> rpls = 
-                    ((Functional) r).getParameterLists();
+            Functional fd = (Functional) d;
+            Functional fr = (Functional) r;
+            List<ParameterList> dpls = fd.getParameterLists();
+            List<ParameterList> rpls = fr.getParameterLists();
             if (dpls!=null && !dpls.isEmpty() && 
                     rpls!=null && !rpls.isEmpty()) {
                 ParameterList dpls0 = dpls.get(0);
@@ -825,8 +828,7 @@ public class ModelUtil {
             return unit.getObjectDeclaration();
         }
         else if (paramType.isIntersection()) {
-            List<Type> sts = 
-                    paramType.getSatisfiedTypes();
+            List<Type> sts = paramType.getSatisfiedTypes();
             if (sts.size()==2) {
                 //attempt to eliminate Basic from the 
                 //intersection - very useful for anonymous
@@ -932,6 +934,26 @@ public class ModelUtil {
         return true;
     }
     
+    private static int countTypeParameters(
+            Declaration declaration) {
+        int count = 0;
+        while (true) {
+            if (declaration instanceof Generic) {
+                Generic g = (Generic) declaration;
+                count += g.getTypeParameters().size();
+            }
+            if (declaration.isClassOrInterfaceMember()) {
+                declaration = 
+                        (Declaration) 
+                            declaration.getContainer();
+            }
+            else {
+                break;
+            }
+        }
+        return count;
+    }
+
     /**
      * Given a declaration, a list of type arguments to the 
      * declaration, and a receiving type, collect together
@@ -958,24 +980,23 @@ public class ModelUtil {
     getTypeArgumentMap(Declaration declaration, 
             Type receivingType, 
             List<Type> typeArguments) {        
-        List<TypeParameter> typeParameters = 
-                getTypeParameters(declaration);
-        int count = countTypeParameters(receivingType, 
-                typeParameters);
+        int count = countTypeParameters(declaration);
         if (count==0) {
             return EMPTY_TYPE_ARG_MAP;
         }
         else {
             return aggregateTypeArguments(receivingType, 
-                    typeArguments, typeParameters, count);
+                    typeArguments, declaration, count);
         }
     }
 
     private static Map<TypeParameter, Type> 
     aggregateTypeArguments(Type receivingType, 
             List<Type> typeArguments,
-            List<TypeParameter> typeParameters, 
+            Declaration declaration,
             int count) {
+        List<TypeParameter> typeParameters = 
+                getTypeParameters(declaration);
         Map<TypeParameter,Type> map = 
                 new HashMap<TypeParameter,Type>
                     (count);
@@ -983,20 +1004,15 @@ public class ModelUtil {
         //from the whole qualified type!
         if (receivingType!=null) {
             if (receivingType.isIntersection()) {
-                for (Type dt: 
+                for (Type supertype: 
                         receivingType.getSatisfiedTypes()) {
-                    while (dt!=null) {
-                        map.putAll(dt.getTypeArguments());
-                        dt = dt.getQualifyingType();
-                    }
+                    aggregateTypeArguments(map, 
+                            supertype, declaration);
                 }
             }
             else {
-                Type dt = receivingType;
-                while (dt!=null) {
-                    map.putAll(dt.getTypeArguments());
-                    dt = dt.getQualifyingType();
-                }
+                aggregateTypeArguments(map, 
+                        receivingType, declaration);
             }
         }
         if (typeArguments!=null) {
@@ -1013,6 +1029,23 @@ public class ModelUtil {
         return map;
     }
 
+    private static void aggregateTypeArguments(
+            Map<TypeParameter, Type> map, 
+            Type dt, Declaration d) {
+        while (dt!=null && d.isClassOrInterfaceMember()) {
+            TypeDeclaration declaringType = 
+                    (TypeDeclaration) 
+                        d.getContainer();
+            Type aqt = dt.getSupertype(declaringType);
+            if (aqt==null) {
+                break;
+            }
+            map.putAll(aqt.getTypeArguments());
+            dt = aqt.getQualifyingType();
+            d = aqt.getDeclaration();
+        }
+    }
+    
     public static Map<TypeParameter,SiteVariance> 
     getVarianceMap(Declaration declaration, 
             Type receivingType, 
@@ -1021,16 +1054,12 @@ public class ModelUtil {
             return EMPTY_VARIANCE_MAP;
         }
         else {
-            List<TypeParameter> typeParameters = 
-                    getTypeParameters(declaration);
-            int count = countTypeParameters(receivingType, 
-                    typeParameters);
-            if (count==0) {
+            if (countTypeParameters(declaration)==0) {
                 return EMPTY_VARIANCE_MAP;
             }
             else {
                 return aggregateVariances(receivingType, 
-                        variances, typeParameters);
+                        variances, declaration);
             }
         }
     }
@@ -1038,29 +1067,26 @@ public class ModelUtil {
     private static Map<TypeParameter, SiteVariance> 
     aggregateVariances(Type receivingType, 
             List<SiteVariance> variances,
-            List<TypeParameter> typeParameters) {
+            Declaration declaration) {
         Map<TypeParameter,SiteVariance> map = 
                 new HashMap<TypeParameter,SiteVariance>();
         //make sure we collect all type arguments
         //from the whole qualified type!
         if (receivingType!=null) {
             if (receivingType.isIntersection()) {
-                for (Type dt: 
+                for (Type supertype: 
                         receivingType.getSatisfiedTypes()) {
-                    while (dt!=null) {
-                        map.putAll(dt.getVarianceOverrides());
-                        dt = dt.getQualifyingType();
-                    }
+                    aggregateVariances(map, supertype, 
+                            declaration);
                 }
             }
             else {
-                Type dt = receivingType;
-                while (dt!=null) {
-                    map.putAll(dt.getVarianceOverrides());
-                    dt = dt.getQualifyingType();
-                }
+                aggregateVariances(map, receivingType, 
+                        declaration);
             }
         }
+        List<TypeParameter> typeParameters = 
+                getTypeParameters(declaration);
         for (int i=0; 
                 i<typeParameters.size() && 
                 i<variances.size(); 
@@ -1073,7 +1099,26 @@ public class ModelUtil {
         return map;
     }
 
-    private static int countTypeParameters(
+    private static void aggregateVariances(
+            Map<TypeParameter,SiteVariance> map, 
+            Type dt, Declaration d) {
+        while (dt!=null) {
+            if (d.isClassOrInterfaceMember()) {
+                TypeDeclaration declaringType = 
+                        (TypeDeclaration) 
+                            d.getContainer();
+                Type aqt = dt.getSupertype(declaringType);
+                if (aqt==null) {
+                    break;
+                }
+                map.putAll(dt.getVarianceOverrides());
+                dt = aqt.getQualifyingType();
+                d = aqt.getDeclaration();
+            }
+        }
+    }
+
+    /*private static int countTypeParameters(
             Type receivingType,
             List<TypeParameter> typeParameters) {
         int count = typeParameters.size();
@@ -1081,11 +1126,11 @@ public class ModelUtil {
         //from the whole qualified type!
         if (receivingType!=null) {
             if (receivingType.isIntersection()) {
-                for (Type dt: 
+                for (Type supertype: 
                         receivingType.getSatisfiedTypes()) {
-                    while (dt!=null) {
-                        count += dt.getTypeArguments().size();
-                        dt = dt.getQualifyingType();
+                    while (supertype!=null) {
+                        count += supertype.getTypeArguments().size();
+                        supertype = supertype.getQualifyingType();
                     }
                 }
             }
@@ -1098,7 +1143,7 @@ public class ModelUtil {
             }
         }
         return count;
-    }
+    }*/
 
     public static List<TypeParameter> getTypeParameters(
             Declaration declaration) {
@@ -1128,7 +1173,7 @@ public class ModelUtil {
             Type pt) {
         if (pt==null || 
                 !list.isEmpty() && 
-                pt.isNothing()) {
+                pt.isExactlyNothing()) {
             return;
         }
         else if (pt.isAnything()) {
@@ -1136,7 +1181,6 @@ public class ModelUtil {
             list.add(pt);
         }
         else if (pt.isUnion()) {
-            // cheaper c-for than foreach
             List<Type> caseTypes = 
                     pt.getCaseTypes();
             for ( int i=0, size=caseTypes.size(); 
@@ -1147,7 +1191,6 @@ public class ModelUtil {
         }
         else if (pt.isWellDefined()) {
             boolean add=true;
-            // cheaper c-for than foreach
             for (int i=0; i<list.size(); i++) {
                 Type t = list.get(i);
                 if (pt.isSubtypeOf(t)) {
@@ -1178,7 +1221,7 @@ public class ModelUtil {
                 type.isAnything()) {
             return;
         }
-        else if (type.isNothing()) {
+        else if (type.isExactlyNothing()) {
             list.clear();
             list.add(type);
         }
@@ -1353,7 +1396,8 @@ public class ModelUtil {
         if (p==null || q==null) {
             return false;
         }
-        if (p.isNothing() || q.isNothing()) {
+        if (p.isExactlyNothing() || 
+            q.isExactlyNothing()) {
             return true;
         }
         TypeDeclaration pd = p.getDeclaration();
@@ -1478,10 +1522,8 @@ public class ModelUtil {
         Interface nst = unit.getSequenceDeclaration();
         if (pd.inherits(nst) && qd.inherits(st) ||
             qd.inherits(nst) && pd.inherits(st)) {
-            Type pet = 
-                    unit.getSequentialElementType(p);
-            Type qet = 
-                    unit.getSequentialElementType(q);
+            Type pet = unit.getSequentialElementType(p);
+            Type qet = unit.getSequentialElementType(q);
             if (emptyMeet(pet, qet, unit)) {
                 return true;
             }
@@ -1498,10 +1540,8 @@ public class ModelUtil {
             }
         }
         if (pd.inherits(td) && qd.inherits(st)) {
-            List<Type> pal = 
-                    p.getTypeArgumentList();
-            Type qet = 
-                    unit.getSequentialElementType(q);
+            List<Type> pal = p.getTypeArgumentList();
+            Type qet = unit.getSequentialElementType(q);
             if (pal.size()>=3) {
                 if (emptyMeet(pal.get(1), qet, unit) ||
                     emptyMeet(pal.get(2), 
@@ -1512,10 +1552,8 @@ public class ModelUtil {
             }
         }
         if (qd.inherits(td) && pd.inherits(st)) {
-            List<Type> qal = 
-                    q.getTypeArgumentList();
-            Type pet = 
-                    unit.getSequentialElementType(p);
+            List<Type> qal = q.getTypeArgumentList();
+            Type pet = unit.getSequentialElementType(p);
             if (qal.size()>=3) {
                 if (emptyMeet(qal.get(1), pet, unit) ||
                     emptyMeet(qal.get(2), 
@@ -1529,33 +1567,42 @@ public class ModelUtil {
     }
 
     /**
-     * Given two instantiations of a qualified type constructor, 
-     * determine the qualifying type of the principal 
-     * instantiation of that type constructor for the 
-     * intersection of the two types.
+     * Given two instantiations of a qualified type 
+     * constructor, determine the qualifying type of the 
+     * principal instantiation of that type constructor for 
+     * the intersection of the two types.
+     * 
+     * @param p the first instantiation
+     * @param q the second instantiation
+     * @param td the type constructor
      */
     static Type principalQualifyingType(
-            Type pt, Type t, 
-            TypeDeclaration td, Unit unit) {
-        Type ptqt = pt.getQualifyingType();
-        Type tqt = t.getQualifyingType();
+            Type p, Type q, Declaration td, Unit unit) {
+        Type pqt = p.getQualifyingType();
+        Type qqt = q.getQualifyingType();
         Scope tdc = td.getContainer();
-        if (ptqt!=null && tqt!=null && 
-                tdc instanceof TypeDeclaration) {
-            TypeDeclaration qtd = (TypeDeclaration) tdc;
-            Type pst = ptqt.getSupertype(qtd);
-            Type st = tqt.getSupertype(qtd);
-            if (pst!=null && st!=null) {
-                return principalInstantiation(qtd, pst, st, 
-                        unit);
+        if (pqt!=null && qqt!=null) {
+            if (tdc instanceof TypeDeclaration) {
+                TypeDeclaration qtd = (TypeDeclaration) tdc;
+                Type pst = pqt.getSupertype(qtd);
+                Type qst = qqt.getSupertype(qtd);
+                if (pst!=null && qst!=null) {
+                    return principalInstantiation(qtd, pst, qst, 
+                            unit);
+                }
+            }
+            else {
+                if (pqt.isExactly(qqt)) {
+                    return pqt;
+                }
             }
         }
         return null;
     }
     
     /**
-     * Determine if a type of form X<P>&X<Q> is equivalent to
-     * Nothing where X<T> is invariant in T.
+     * Determine if a type of form X<P>&X<Q> is equivalent
+     * to Nothing where X<T> is invariant in T.
      * 
      * @param p the argument type P
      * @param q the argument type Q
@@ -1652,8 +1699,7 @@ public class ModelUtil {
      * duplicates. 
      */
     public static Type unionType(
-            Type lhst, Type rhst, 
-            Unit unit) {
+            Type lhst, Type rhst, Unit unit) {
         List<Type> list = new ArrayList<Type>(2);
         addToUnion(list, rhst);
         addToUnion(list, lhst);
@@ -1667,8 +1713,7 @@ public class ModelUtil {
      * canonicalizing, and eliminating duplicates. 
      */
     public static Type intersectionType(
-            Type lhst, Type rhst, 
-            Unit unit) {
+            Type lhst, Type rhst, Unit unit) {
         Type simpleIntersection = 
                 getSimpleIntersection(lhst, rhst);
         if (simpleIntersection != null) {
@@ -1729,71 +1774,75 @@ public class ModelUtil {
         if (a == null || b == null) {
             return null;
         }
-        TypeDeclaration aDecl = a.getDeclaration();
-        TypeDeclaration bDecl = b.getDeclaration();
-        if (aDecl == null || bDecl == null) {
+        TypeDeclaration ad = a.getDeclaration();
+        TypeDeclaration bd = b.getDeclaration();
+        if (ad == null || bd == null) {
             return null;
         }
         if (!a.isClassOrInterface()) {
             if (a.isUnion() && b.isClassOrInterface()) {
-                return getSimpleIntersection(
-                        b, (ClassOrInterface) bDecl, a);
+                return getSimpleIntersection(b, 
+                        (ClassOrInterface) bd, a);
             }
             return null;
         }
-        if (!b.isClassOrInterface()) {
+        else if (!b.isClassOrInterface()) {
             // here aDecl MUST BE a ClassOrInterface as per flow
             if (b.isUnion()) {
-                return getSimpleIntersection(
-                        a, (ClassOrInterface) aDecl, b);
+                return getSimpleIntersection(a, 
+                        (ClassOrInterface) ad, b);
             }
             return null;
         }
-        String aName = aDecl.getQualifiedNameString();
-        String bName = bDecl.getQualifiedNameString();
-        if (aName.equals(bName)
-                && aDecl.getTypeParameters().isEmpty()
-                && bDecl.getTypeParameters().isEmpty())
+        String an = ad.getQualifiedNameString();
+        String bn = bd.getQualifiedNameString();
+        if (an.equals(bn)
+                && ad.getTypeParameters().isEmpty()
+                && bd.getTypeParameters().isEmpty())
             return a;
-        if (aName.equals("ceylon.language::Anything")) {
+        if (a.isAnything()) {
             // everything is an Anything
             return b;
         }
-        if (bName.equals("ceylon.language::Anything")) {
+        if (b.isAnything()) {
             // everything is an Anything
             return a;
         }
-        if (aName.equals("ceylon.language::Object")) {
+        if (a.isObject()) {
             // every ClassOrInterface is an object except Null
-            if (bName.equals("ceylon.language::Null") || 
-                bName.equals("ceylon.language::null")) {
-                return aDecl.getUnit().getNothingType();
+            if (b.isNull() || b.isNullValue()) {
+                return ad.getUnit().getNothingType();
             }
-            return b;
-        }
-        if (bName.equals("ceylon.language::Object")) {
-            // every ClassOrInterface is an object except Null
-            if (aName.equals("ceylon.language::Null") || 
-                aName.equals("ceylon.language::null")) {
-                return aDecl.getUnit().getNothingType();
-            }
-            return a;
-        }
-        if (aName.equals("ceylon.language::Null")) {
-            // only null is null
-            if (bName.equals("ceylon.language::Null") || 
-                bName.equals("ceylon.language::null")) {
+            else {
                 return b;
             }
-            return aDecl.getUnit().getNothingType();
         }
-        if (bName.equals("ceylon.language::Null")) {
-            // only null is null
-            if (aName.equals("ceylon.language::Null") || 
-                aName.equals("ceylon.language::null")) {
+        if (b.isObject()) {
+            // every ClassOrInterface is an object except Null
+            if (a.isNull() || a.isNullValue()) {
+                return bd.getUnit().getNothingType();
+            }
+            else {
                 return a;
             }
-            return aDecl.getUnit().getNothingType();
+        }
+        if (a.isNull()) {
+            // only null is null
+            if (b.isNull() || b.isNullValue()) {
+                return b;
+            }
+            else {
+                return ad.getUnit().getNothingType();
+            }
+        }
+        if (b.isNull()) {
+            // only null is null
+            if (a.isNull() || a.isNullValue()) {
+                return a;
+            }
+            else {
+                return bd.getUnit().getNothingType();
+            }
         }
         // not simple
         return null;
@@ -1807,29 +1856,19 @@ public class ModelUtil {
             return null;
         }
 
-        String aName = aDecl.getQualifiedNameString();
         // we only handle Object and Null intersections
-        if (!aName.equals("ceylon.language::Object") && 
-            !aName.equals("ceylon.language::Null")) {
+        boolean aIsObject = a.isObject();
+        boolean aIsNull = a.isNull();
+        if (!aIsObject && !aIsNull) {
             return null;
         }
         
         Type caseA = b.getCaseTypes().get(0);
-        TypeDeclaration caseADecl = caseA.getDeclaration();
-
         Type caseB = b.getCaseTypes().get(1);
-        TypeDeclaration caseBDecl = caseB.getDeclaration();
-
-        boolean isANull = 
-                caseA.isClass() && 
-                "ceylon.language::Null"
-                    .equals(caseADecl.getQualifiedNameString());
-        boolean isBNull = 
-                caseB.isClass() && 
-                "ceylon.language::Null"
-                    .equals(caseBDecl.getQualifiedNameString());
+        boolean isANull = caseA.isNull();
+        boolean isBNull = caseB.isNull();
         
-        if (aName.equals("ceylon.language::Object")) {
+        if (aIsObject) {
             if (isANull) {
                 return simpleObjectIntersection(aDecl, caseB);
             }
@@ -1839,7 +1878,7 @@ public class ModelUtil {
             // too complex
             return null;
         }
-        if (aName.equals("ceylon.language::Null")) {
+        if (aIsNull) {
             if (isANull) {
                 return caseA;
             }
@@ -1870,10 +1909,7 @@ public class ModelUtil {
                 return canonicalIntersection(types, unit);
             }
             for (Type sat: satisfiedTypes) {
-                if (sat.isClassOrInterface() && 
-                        sat.getDeclaration()
-                            .getQualifiedNameString()
-                            .equals("ceylon.language::Object")) {
+                if (sat.isObject()) {
                     // it is already an Object
                     return type;
                 }
@@ -2127,6 +2163,11 @@ public class ModelUtil {
      *   same type where one argument is a type parameter
      * 
      * Nevertheless, we give it our best shot!
+     * 
+     * @param dec the type constructor
+     * @param first the first instantiation
+     * @param second the second instantiation
+     * 
      */
     public static Type principalInstantiation(
             TypeDeclaration dec, 
@@ -2246,10 +2287,10 @@ public class ModelUtil {
             }
             args.add(arg);
         }
-        Type pqt = 
-                principalQualifyingType(first, second, 
-                        dec, unit);
-        Type result = dec.appliedType(pqt, args);
+        Type result =
+                dec.appliedType(principalQualifyingType(
+                        first, second, dec, unit), 
+                        args);
         result.setVarianceOverrides(varianceOverrides);
         return result;
     }
@@ -2447,6 +2488,15 @@ public class ModelUtil {
         return false;
     }
     
+    public static boolean isInNativeHeaderContainer(Declaration dec) {
+        Scope container = dec.getContainer();
+        if (container instanceof Declaration) {
+            Declaration d = (Declaration) container;
+            return d.isNativeHeader();
+        }
+        return false;
+    }
+    
     public static Declaration getNativeDeclaration(
             Declaration decl, Backend backend) {
         return getNativeDeclaration(decl, 
@@ -2524,9 +2574,9 @@ public class ModelUtil {
      * 
      * @return the matching declaration
      */
-    public static Declaration getDirectMemberForBackend(
-            Scope scope, String name, String backend) {
-        for (Declaration dec: scope.getMembers()) {
+    public static Declaration lookupMemberForBackend(
+            List<Declaration> members, String name, String backend) {
+        for (Declaration dec: members) {
             if (isResolvable(dec) && isNamed(name, dec)) {
                 String nat = dec.getNativeBackend();
                 if (nat==null) {
@@ -2540,6 +2590,25 @@ public class ModelUtil {
             }
         }
         return null;
+    }
+    
+    public static Declaration getNativeHeader(Declaration dec) {
+        Declaration header = getNativeHeader(dec.getContainer(), dec.getName());
+        // In case of objects make sure we return the same type of
+        // declaration we were called with
+        if (dec instanceof ClassOrInterface
+                && header instanceof Value
+                && ModelUtil.isObject((Value)header)) {
+            header = ((Value)header).getType().getDeclaration();
+        }
+        // In case of constructors we make sure we return the same
+        // type of declaration we were called with
+        else if (dec instanceof Constructor
+                && header instanceof FunctionOrValue
+                && isConstructor(header)) {
+            header = getConstructor(header);
+        }
+        return header;
     }
     
     /**
@@ -2561,7 +2630,7 @@ public class ModelUtil {
                 // The container is a native implementation so
                 // we first need to find _its_ header
                 Scope c =
-                        (Scope)getDirectMemberForBackend(cd.getContainer(),
+                        (Scope)cd.getContainer().getDirectMemberForBackend(
                                 cd.getName(),
                                 Backend.None.nativeAnnotation);
                 if (c != null) {
@@ -2575,21 +2644,37 @@ public class ModelUtil {
             }
         }
         // Find the header
-        Declaration header =
-                getDirectMemberForBackend(container,
-                        name,
-                        Backend.None.nativeAnnotation);
+        Declaration header;
+        if (container instanceof Class && name == null) {
+            // Special case for the default constructor
+            header = ((Class)container).getDefaultConstructorFunctionOrValue();
+        } else {
+            header =
+                    container.getDirectMemberForBackend(
+                            name,
+                            Backend.None.nativeAnnotation);
+        }
         return header;
     }
     
-    // Check if the Value is part of an object (is there a better way to check this?)
+    // Check if the Value is part of an object
     public static boolean isObject(Value v) {
-        return v.getType().getDeclaration().getQualifiedNameString().equals(v.getQualifiedNameString());
+        Type type = v.getType();
+        // Check type because in case of compile errors it can be null
+        if (type != null) {
+            TypeDeclaration typeDecl = type.getDeclaration();
+            return typeDecl.isAnonymous();
+        }
+        return false;
     }
 
     public static boolean isImplemented(Declaration decl) {
         if (decl instanceof FunctionOrValue) {
-            return ((FunctionOrValue)decl).isImplemented();
+            FunctionOrValue fov = (FunctionOrValue) decl;
+            return fov.isImplemented();
+        } else if (decl instanceof Constructor) {
+            // For now constructors are always implemented
+            return true;
         }
         return false;
     }
@@ -2828,5 +2913,24 @@ public class ModelUtil {
         Type type = ta.getType();
         type.setTypeConstructor(true);
         return type;
+    }
+
+    public static boolean isConstructor(Declaration member) {
+        return member instanceof Constructor ||
+                member instanceof FunctionOrValue && 
+                    ((FunctionOrValue) member)
+                        .getTypeDeclaration() 
+                            instanceof Constructor;
+    }
+    
+    public static Constructor getConstructor(Declaration member) {
+        if (member instanceof Constructor) {
+            return (Constructor)member;
+        } else if (member instanceof FunctionOrValue
+                && ((FunctionOrValue)member).getTypeDeclaration() instanceof Constructor) {
+            return (Constructor)((FunctionOrValue)member).getTypeDeclaration();
+        } else {
+            return null;
+        }
     }
 }

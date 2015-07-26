@@ -160,6 +160,46 @@ public class TypeParameter extends TypeDeclaration {
     }
     
     @Override
+    public boolean isEmptyType() {
+        for (Type st: getSatisfiedTypes()) {
+            if (st.getDeclaration().isEmptyType()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    @Override
+    public boolean isTupleType() {
+        for (Type st: getSatisfiedTypes()) {
+            if (st.getDeclaration().isTupleType()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    @Override
+    public boolean isSequenceType() {
+        for (Type st: getSatisfiedTypes()) {
+            if (st.getDeclaration().isSequenceType()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    @Override
+    public boolean isSequentialType() {
+        for (Type st: getSatisfiedTypes()) {
+            if (st.getDeclaration().isSequentialType()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    @Override
     public List<Type> getSatisfiedTypes() {
         List<Type> satisfiedTypes = 
                 super.getSatisfiedTypes();
@@ -223,7 +263,7 @@ public class TypeParameter extends TypeDeclaration {
         }
         else {
             List<Type> sts = getSatisfiedTypes();
-            for (int i = 0, s=sts.size(); i<s; i++) {
+            for (int i=0, s=sts.size(); i<s; i++) {
                 Type st = sts.get(i);
                 if (st.getDeclaration().inherits(dec)) {
                     return true;

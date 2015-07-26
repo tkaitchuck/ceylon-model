@@ -18,15 +18,27 @@ public class TypeAlias extends TypeDeclaration {
     @Override
     void collectSupertypeDeclarations(
             List<TypeDeclaration> results) {
-        getExtendedType()
-            .getDeclaration()
+        Type et = getExtendedType();
+        if (et!=null) {
+            et.getDeclaration()
                 .collectSupertypeDeclarations(results);
+        }
     }
     
     @Override
     public boolean inherits(TypeDeclaration dec) {
-        return getExtendedType()
-                .getDeclaration().inherits(dec);
+        Type et = getExtendedType();
+        if (et!=null) {
+            Type.checkDepth();
+            Type.incDepth();
+            try {
+                return et.getDeclaration().inherits(dec);
+            }
+            finally {
+                Type.decDepth();
+            }
+        }
+        return false;
     }
     
     @Override
@@ -86,6 +98,78 @@ public class TypeAlias extends TypeDeclaration {
         return getContainer() instanceof ClassOrInterface;
     }
 
+    @Override
+    public boolean isEmptyType() {
+        Type et = getExtendedType();
+        if (et!=null) {
+            Type.checkDepth();
+            Type.incDepth();
+            try {
+                return et.getDeclaration().isEmptyType();
+            }
+            finally {
+                Type.decDepth();
+            }
+        }
+        else {
+            return false;
+        }
+    }
+    
+    @Override
+    public boolean isTupleType() {
+        Type et = getExtendedType();
+        if (et!=null) {
+            Type.checkDepth();
+            Type.incDepth();
+            try {
+                return et.getDeclaration().isTupleType();
+            }
+            finally {
+                Type.decDepth();
+            }
+        }
+        else {
+            return false;
+        }
+    }
+    
+    @Override
+    public boolean isSequentialType() {
+        Type et = getExtendedType();
+        if (et!=null) {
+            Type.checkDepth();
+            Type.incDepth();
+            try {
+                return et.getDeclaration().isSequentialType();
+            }
+            finally {
+                Type.decDepth();
+            }
+        }
+        else {
+            return false;
+        }
+    }
+    
+    @Override
+    public boolean isSequenceType() {
+        Type et = getExtendedType();
+        if (et!=null) {
+            Type.checkDepth();
+            Type.incDepth();
+            try {
+                return et.getDeclaration().isSequenceType();
+            }
+            finally {
+                Type.decDepth();
+            }
+        }
+        else {
+            return false;
+        }
+    }
+    
     @Override
     protected int hashCodeForCache() {
         int ret = 17;

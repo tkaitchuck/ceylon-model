@@ -213,7 +213,7 @@ public abstract class TypeDeclaration extends Declaration
         return type;
     }
 
-    private List<Declaration> getMembers(String name, 
+    private List<Declaration> getInheritableMembers(String name, 
             List<TypeDeclaration> visited) {
         if (visited.contains(this)) {
             return Collections.emptyList();
@@ -223,8 +223,10 @@ public abstract class TypeDeclaration extends Declaration
             List<Declaration> members = 
                     new ArrayList<Declaration>();
             for (Declaration d: getMembers()) {
-                if (d.getName()!=null && 
-                        d.getName().equals(name)) {
+                if (d.isShared() &&
+                        d.getName()!=null && 
+                        d.getName().equals(name) &&
+                        isResolvable(d)) {
                     members.add(d);
                 }
             }
@@ -269,12 +271,9 @@ public abstract class TypeDeclaration extends Declaration
             //if ( !(t instanceof TypeParameter) ) { //don't look for members in a type parameter with a self-referential lower bound
             for (Declaration member: 
                     st.getDeclaration()
-                        .getMembers(name, visited)) {
-                if (member.isShared() && 
-                        isResolvable(member)) {
-                    if (!contains(members, member)) {
-                    	members.add(member);
-                    }
+                        .getInheritableMembers(name, visited)) {
+                if (!contains(members, member)) {
+                    members.add(member);
                 }
             }
             //}
@@ -283,12 +282,9 @@ public abstract class TypeDeclaration extends Declaration
         if (et!=null) {
             for (Declaration member: 
                     et.getDeclaration()
-                        .getMembers(name, visited)) {
-                if (member.isShared() && 
-                        isResolvable(member)) {
-                    if (!contains(members, member)) {
-                    	members.add(member);
-                    }
+                        .getInheritableMembers(name, visited)) {
+                if (!contains(members, member)) {
+                    members.add(member);
                 }
             }
         }
@@ -501,8 +497,8 @@ public abstract class TypeDeclaration extends Declaration
                 getDirectMember(name, 
                         signature, variadic);
         if (dec!=null && dec.isShared()) {
-            //if it's shared, it's what we're 
-            //looking for, return it
+            //if it's shared, it's what we're looking 
+            //for, return it
             //TODO: should also return it if we're 
             //      calling from local scope!
             if (signature!=null && dec.isAbstraction()) {
@@ -553,8 +549,8 @@ public abstract class TypeDeclaration extends Declaration
         if (dec!=null) {
             if (signature!=null && 
                     dec.isAbstraction()) {
-                // look for a supertype declaration that matches 
-                // the given signature better
+                // look for a supertype declaration that 
+                // matches the given signature better
                 Declaration supertype = 
                         getSupertypeDeclaration(name, 
                                 signature, variadic)
@@ -673,8 +669,7 @@ public abstract class TypeDeclaration extends Declaration
             final String name, 
             final List<Type> signature, 
             final boolean variadic) {
-        class ExactCriteria 
-                implements Type.Criteria {
+        class ExactCriteria implements Type.Criteria {
             @Override
             public boolean satisfies(TypeDeclaration type) {
                 // do not look in ourselves
@@ -701,8 +696,7 @@ public abstract class TypeDeclaration extends Declaration
             	return true;
             }
         };
-        class LooseCriteria 
-                implements Type.Criteria {
+        class LooseCriteria implements Type.Criteria {
             @Override
             public boolean satisfies(TypeDeclaration type) {
                 // do not look in ourselves
@@ -710,7 +704,8 @@ public abstract class TypeDeclaration extends Declaration
                     return false;
                 }
                 Declaration dm = 
-                        type.getDirectMember(name, null, false);
+                        type.getDirectMember(name, 
+                                null, false);
                 if (dm!=null && 
                         dm.isShared() && 
                         isResolvable(dm)) {
@@ -726,13 +721,45 @@ public abstract class TypeDeclaration extends Declaration
                 return true;
             }
         };
-        //this works by finding the most-specialized supertype
-        //that defines the member
+        class SkipFormalCriteria implements Type.Criteria {
+            @Override
+            public boolean satisfies(TypeDeclaration type) {
+                // do not look in ourselves
+                if (type == TypeDeclaration.this) {
+                    return false;
+                }
+                Declaration dm = 
+                        type.getDirectMember(name, 
+                                signature, variadic);
+                if (dm!=null && 
+                        dm.isShared() &&
+                        isResolvable(dm)) {
+                    //ignore formals, to allow for Java's
+                    //refinement model
+                    return !dm.isFormal() &&
+                            (!dm.isAbstraction() || 
+                            signature == null);
+                }
+                else {
+                    return false;
+                }
+            }
+            @Override
+            public boolean isMemberLookup() {
+                return true;
+            }
+        };
+        //this works by finding the most-specialized 
+        //supertype that defines the member
         Type type = getType();
         Type st = type.getSupertype(new ExactCriteria());
         if (st == null) {
             //try again, ignoring the given signature
             st = type.getSupertype(new LooseCriteria());
+        }
+        else if (st.isUnknown() && this instanceof Class) {
+            //try again, ignoring Java abstract members
+            st = type.getSupertype(new SkipFormalCriteria());
         }
         if (st == null) {
             //no such member
@@ -1003,6 +1030,10 @@ public abstract class TypeDeclaration extends Declaration
         return false;
     }
     
+    boolean isNullValue() {
+        return false;
+    }
+    
     public boolean isBasic() {
         return false;
     }
@@ -1035,6 +1066,14 @@ public abstract class TypeDeclaration extends Declaration
         return false;
     }
 
+    boolean isEmptyValue() {
+        return false;
+    }
+    
+    public boolean isEntry() {
+        return false;
+    }
+    
     public boolean isTuple() {
         return false;
     }
@@ -1051,6 +1090,10 @@ public abstract class TypeDeclaration extends Declaration
         return false;
     }
     
+    public boolean isRange() {
+        return false;
+    }
+
     public List<TypedDeclaration> getCaseValues() {
         return caseValues;
     }
@@ -1058,5 +1101,21 @@ public abstract class TypeDeclaration extends Declaration
     public void setCaseValues(List<TypedDeclaration> caseValues) {
         this.caseValues = caseValues;
     }
+    
+    public boolean isSequentialType() {
+        return false;
+    }
 
+    public boolean isSequenceType() {
+        return false;
+    }
+    
+    public boolean isEmptyType() {
+        return false;
+    }
+    
+    public boolean isTupleType() {
+        return false;
+    }
+    
 }

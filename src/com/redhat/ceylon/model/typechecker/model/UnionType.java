@@ -124,6 +124,26 @@ public class UnionType extends TypeDeclaration {
     }
     
     @Override
+    public boolean isEmptyType() {
+        return inherits(getUnit().getEmptyDeclaration());
+    }
+    
+    @Override
+    public boolean isTupleType() {
+        return inherits(getUnit().getTupleDeclaration());
+    }
+    
+    @Override
+    public boolean isSequenceType() {
+        return inherits(getUnit().getSequenceDeclaration());
+    }
+    
+    @Override
+    public boolean isSequentialType() {
+        return inherits(getUnit().getSequentialDeclaration());
+    }
+    
+    @Override
     public boolean inherits(TypeDeclaration dec) {
         if (dec.isAnything()) {
             return true;

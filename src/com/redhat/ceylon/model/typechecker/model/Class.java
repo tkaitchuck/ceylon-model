@@ -105,6 +105,21 @@ public class Class extends ClassOrInterface implements Functional {
         }
     }
     
+    public FunctionOrValue getDefaultConstructorFunctionOrValue() {
+        if (constructors) {
+            for (Declaration dec: getMembers()) {
+                if (dec instanceof FunctionOrValue &&
+                        dec.getName()==null) {
+                    return (FunctionOrValue) dec;
+                }
+            }
+            return null;
+        }
+        else {
+            return null;
+        }
+    }
+    
     @Override
     public boolean isSealed() {
         if (parameterList==null) {
@@ -271,6 +286,18 @@ public class Class extends ClassOrInterface implements Functional {
     }
 
     @Override
+    boolean isNullValue() {
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::null");
+    }
+
+    @Override
+    boolean isEmptyValue() {
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::empty");
+    }
+
+    @Override
     public boolean isBasic() {
         return Objects.equals(getQualifiedNameString(),
                 "ceylon.language::Basic");
@@ -319,17 +346,39 @@ public class Class extends ClassOrInterface implements Functional {
     }
     
     @Override
+    public boolean isEntry() {
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Entry");
+    }
+    
+    @Override
+    public boolean isRange() {
+        return Objects.equals(getQualifiedNameString(),
+                "ceylon.language::Range");
+    }
+    
+    @Override
     public boolean inherits(TypeDeclaration dec) {
         if (dec.isAnything()) {
             return true;
         }
-//        else if (dec.isObject()) {
-//            return !isAnything() && !isNull() &&
-//            !getQualifiedNameString().equals("ceylon.language::null");
-//        }
-//        else 
-        if (dec instanceof Class &&  equals(dec)) {
+        else if (dec.isObject()) {
+            return !isAnything() && 
+                !isNull() && !isNullValue();
+        }
+        else if (dec.isNull()) {
+            return isNull() || isNullValue();
+        }
+        else if (dec instanceof Class && equals(dec)) {
             return true;
+        }
+        else if (dec.isFinal() &&
+                //take into account constructors 
+                //of final Java classes
+                !dec.isAbstraction()) {
+            //cannot possibly be true, 
+            //since dec is nonequal
+            return false;
         }
         else {
             //TODO: optimize this to avoid walking the
@@ -383,6 +432,98 @@ public class Class extends ClassOrInterface implements Functional {
 
     public void setJavaEnum(boolean javaEnum) {
         this.javaEnum = javaEnum;
+    }
+    
+    @Override
+    public boolean isEmptyType() {
+        return isEmptyValue();
+    }
+    
+    @Override
+    public boolean isTupleType() {
+        return isTuple();
+    }
+    
+    private int sequentialType;
+    
+    private int sequenceType;
+    
+    @Override
+    public boolean isSequentialType() {
+        if (sequentialType==0) {
+            sequentialType = 
+                    isSequentialTypeInternal() ? 1 : -1;
+        }
+        return sequentialType>0;
+    }
+
+    @Override
+    public boolean isSequenceType() {
+        if (sequenceType==0) {
+            sequenceType = 
+                    isSequenceTypeInternal() ? 1 : -1;
+        }
+        return sequenceType>0;
+    }
+
+    private boolean isSequentialTypeInternal() {
+        Package pack = getUnit().getPackage();
+        if (!pack.getNameAsString()
+                .equals(Module.LANGUAGE_MODULE_NAME)) {
+            return false;
+        }
+        else if (isAnything() || isObject() || 
+                isNull() || isBasic()) {
+            return false;
+        }
+        else if (isEmptyValue() || isRange() || isTuple()) {
+            return true;
+        }
+        else {
+            //handles Measure/Span
+            Type et = getExtendedType();
+            if (et!=null && et.isRange()) {
+                return true;
+            }
+            //handles misc direct impls of Sequence
+            List<Type> sts = getSatisfiedTypes();
+            for (Type st: sts) {
+                if (st.isSequence()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+    
+    private boolean isSequenceTypeInternal() {
+        Package pack = getUnit().getPackage();
+        if (!pack.getNameAsString()
+                .equals(Module.LANGUAGE_MODULE_NAME)) {
+            return false;
+        }
+        else if (isAnything() || isObject() || 
+                isNull() || isBasic()) {
+            return false;
+        }
+        else if (isRange() || isTuple()) {
+            return true;
+        }
+        else {
+            //handles Measure/Span
+            Type et = getExtendedType();
+            if (et!=null && et.isRange()) {
+                return true;
+            }
+            //handles misc direct impls of Sequence
+            List<Type> sts = getSatisfiedTypes();
+            for (Type st: sts) {
+                if (st.isSequence()) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
     
     @Override

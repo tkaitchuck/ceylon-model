@@ -159,6 +159,23 @@ public class Type extends Reference {
         this.typeConstructorParameter = typeConstructorParameter;
     }
     
+    private int exactlyNothing;
+    
+    public boolean isExactlyNothing() {
+        if (isNothing()) {
+            return true;
+        }
+        else {
+            if (exactlyNothing==0) {
+                exactlyNothing =
+                        isEmptySequenceType() ||
+                        isEmptyTupleType() ?
+                                1 : -1;
+            }
+            return exactlyNothing>0;
+        }
+    }
+    
     /**
      * Is this type exactly the same type as the
      * given type? 
@@ -175,17 +192,17 @@ public class Type extends Reference {
             if (isUnknown() || type.isUnknown()) {
                 return this==type;
             }
-            else if (isNothing()) {
-                return type.isNothing();
-            }
-            else if (type.isNothing()) {
-                return isNothing();
-            }
             else if (isAnything()) {
                 return type.isAnything();
             }
             else if (type.isAnything()) {
                 return isAnything();
+            }
+            else if (isExactlyNothing()) {
+                return type.isExactlyNothing();
+            }
+            else if (type.isExactlyNothing()) {
+                return isExactlyNothing();
             }
             else if (isUnion()) {
                 List<Type> cases = getCaseTypes();
@@ -379,6 +396,46 @@ public class Type extends Reference {
             decDepth();
         }
     }
+
+    private boolean isEmptySequenceType() {
+        Unit unit = getDeclaration().getUnit();
+        if (unit.isSequenceType(this)) {
+            Type et = unit.getSequentialElementType(this);
+            return et!=null && et.isExactlyNothing();
+        }
+        else {
+            return false;
+        }
+    }
+
+    private boolean isEmptyTupleType() {
+        Unit unit = getDeclaration().getUnit();
+        if (unit.isTupleType(this)) {
+            List<Type> tal = getTypeArgumentList();
+            if (tal.size()>=1) {
+                Type elem = tal.get(0);
+                if (elem!=null &&
+                        elem.isExactlyNothing()) {
+                    return true;
+                }
+            }
+            if (tal.size()>=2) {
+                Type first = tal.get(1);
+                if (first!=null &&
+                        first.isExactlyNothing()) {
+                    return true;
+                }
+            }
+            if (tal.size()>=3) {
+                Type rest = tal.get(2);
+                if (rest!=null &&
+                        rest.isExactlyNothing()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     
     private boolean isExactlyTuple(Type type) {
         TypeDeclaration td = 
@@ -511,20 +568,20 @@ public class Type extends Reference {
         checkDepth();
         incDepth();
         try {
-            if (isNothing()) {
+            if (type.isAnything()) {
                 return true;
             }
-            else if (type.isAnything()) {
+            else if (isExactlyNothing()) {
                 return true;
             }
             else if (isUnknown() || type.isUnknown()) {
                 return this==type;
             }
-            else if (type.isNothing()) {
-                return false;
-            }
             else if (isAnything()) {
                 return false;
+            }
+            else if (type.isExactlyNothing()) {
+                return isExactlyNothing();
             }
             else if (isUnion()) {
                 for (Type ct: 
@@ -1381,18 +1438,12 @@ public class Type extends Reference {
             //this is what the backend expects, apparently
             return null;
         }
-        boolean complexType = 
-                dec instanceof UnionType || 
-                dec instanceof IntersectionType;
-        boolean canCache = 
-                !complexType && 
-                !hasUnderlyingType() && 
-                collectVarianceOverrides().isEmpty() &&
-                TypeCache.isEnabled();
-        TypeCache cache = dec.getUnit().getCache();
-        if (canCache && 
-                cache.containsKey(this, dec)) {
-            return cache.get(this, dec);
+        boolean canCache = canCacheSupertype(dec);
+        if (canCache) {
+            TypeCache cache = dec.getUnit().getCache();
+            if (cache.containsKey(this, dec)) {
+                return cache.get(this, dec);
+            }
         }
         
         while (dec.isAlias()) {
@@ -1424,9 +1475,20 @@ public class Type extends Reference {
         }
         
         if (canCache) {
+            TypeCache cache = dec.getUnit().getCache();
             cache.put(this, dec, superType);
         }
         return superType;
+    }
+
+    private boolean canCacheSupertype(TypeDeclaration dec) {
+        boolean complexType = 
+                dec instanceof UnionType || 
+                dec instanceof IntersectionType;
+        return !complexType && 
+                !hasUnderlyingType() && 
+                collectVarianceOverrides().isEmpty() &&
+                TypeCache.isEnabled();
     }
 
     private boolean isSimpleSupertypeLookup(TypeDeclaration dec) {
@@ -1444,11 +1506,10 @@ public class Type extends Reference {
             return true;
         }
         List<Type> tal = getTypeArgumentList();
-        for (int i=0, l=tal.size(); 
-                i<l; i++) {
+        for (int i=0, size=tal.size(); 
+                i<size; i++) {
             Type ta = tal.get(i);
-            if (ta != null && 
-                    ta.hasUnderlyingType()) {
+            if (ta!=null && ta.hasUnderlyingType()) {
                 return true;
             }
         }
@@ -1610,8 +1671,8 @@ public class Type extends Reference {
     }
     
     private Type getPrincipalInstantiation(Criteria c) {
-        //search for the most-specific supertype 
-        //for the given declaration
+        // search for the most-specific supertype for the
+        // declaration that satisfies the given Criteria
         
         Type result = null;
         Type lowerBound = null;
@@ -1628,9 +1689,8 @@ public class Type extends Reference {
         
         List<Type> satisfiedTypes = 
                 getInternalSatisfiedTypes();
-        // cheaper iteration
-        for (int i=0, l=satisfiedTypes.size(); 
-                i<l; i++) {
+        for (int i=0, size=satisfiedTypes.size(); 
+                i<size; i++) {
             Type satisfiedType = satisfiedTypes.get(i);
             Type possibleResult = 
                     satisfiedType.getSupertype(c);
@@ -1647,45 +1707,17 @@ public class Type extends Reference {
                     lowerBound = possibleResult;
                 }
                 else {
-                    //TODO: this is still needed even though 
-                    //      we keep intersections in canonical 
-                    //      form because you can have stuff like
-                    //      empty of Iterable<String>&Sized
+                    //try to find a supertype of both types
+                    //and form a principal instantiation 
                     TypeDeclaration rd = 
                             result.getDeclaration();
                     TypeDeclaration prd = 
                             possibleResult.getDeclaration();
                     
-                    //Resolve ambiguities in favor of
-                    //the most-refined declaration
-                    /*if (rd.equals(prd)) {
-                        List<Type> args = constructPrincipalInstantiation(
-                                rd, result, possibleResult);
-                        //TODO: broken for member types! ugh :-(
-                        result = rd.getProducedType(result.getQualifyingType(), args);
-                    }
-                    else if (rd.inherits(prd)) {
-                    }
-                    else if (prd.inherits(rd)) {
-                        result = possibleResult;
-                    }*/
-                    
                     TypeDeclaration d = null;
                     if (rd.equals(prd)) {
                         d = rd;
                     }
-                    //Resolve ambiguities in favor of 
-                    //least-refined declaration (in
-                    //order to take advantage of most
-                    //specific type arguments)
-                    /*else if (rd.inherits(prd)) {
-                        d=prd;
-                        result=result.getSupertype(d);
-                    }
-                    else if (prd.inherits(rd)) {
-                        d=rd;
-                        possibleResult=possibleResult.getSupertype(d);
-                    }*/
                     
                     Unit unit = getDeclaration().getUnit();
                     if (d!=null) {
@@ -1703,23 +1735,23 @@ public class Type extends Reference {
                             //by forming the union of the two 
                             //possible results (since A|B is 
                             //always a supertype of A&B)
-                            List<Type> caseTypes = 
-                                    new ArrayList<Type>(2);
-                            //if (extendedType!=null) caseTypes.add(extendedType);
-                            //caseTypes.addAll(satisfiedTypes);
-                            caseTypes.add(result);
-                            caseTypes.add(possibleResult);
-                            result = union(caseTypes, unit)
-                                    .getSupertype(c);
-                            if (result==null) {
-                                return unit.getUnknownType();
-                            }
                             List<Type> types = 
                                     new ArrayList<Type>(2);
                             types.add(lowerBound);
                             types.add(possibleResult);
                             lowerBound = 
                                     intersection(types, unit);
+                            List<Type> lbsts = 
+                                    lowerBound.getSatisfiedTypes();
+                            List<Type> caseTypes = 
+                                    new ArrayList<Type>
+                                        (lbsts.size());
+                            caseTypes.addAll(lbsts);
+                            result = union(caseTypes, unit)
+                                    .getSupertype(c);
+                            if (result==null) {
+                                return unit.getUnknownType();
+                            }
                         }
                         else {
                             return unit.getUnknownType();
@@ -1926,7 +1958,8 @@ public class Type extends Reference {
         if (dec.isMember() && 
                 !dec.isStaticallyImportable()) {
             TypeDeclaration outer = 
-                    (TypeDeclaration) dec.getContainer();
+                    (TypeDeclaration) 
+                        dec.getContainer();
             List<Type> list = 
                     new ArrayList<Type>
                         (caseTypes.size());
@@ -2652,15 +2685,6 @@ public class Type extends Reference {
     private Type getInternalExtendedType() {
         TypeDeclaration dec = getDeclaration();
         Type et = dec.getExtendedType();
-        if (dec.isNative() && !dec.isNativeHeader()) {
-            // Native implementations have the same extended type as
-            // their header, but headers can actually have methods
-            // of their own so we set the extended type to the header
-            Declaration hdr = ModelUtil.getNativeHeader(dec.getContainer(), dec.getName());
-            if (hdr instanceof TypeDeclaration) {
-                et = ((TypeDeclaration)hdr).getType();
-            }
-        }
         if (et==null) {
             return null;
         }
@@ -2766,12 +2790,14 @@ public class Type extends Reference {
 
         Type substitute(Type type, 
                 boolean covariant, boolean contravariant) {
+//            checkDepth();
+//            try {
+//                incDepth();
             TypeDeclaration dec;
             TypeDeclaration ptd = type.getDeclaration();
             Unit unit = ptd.getUnit();
             if (type.isUnion()) {
-                List<Type> cts = 
-                        type.getCaseTypes();
+                List<Type> cts = type.getCaseTypes();
                 List<Type> types = 
                         new ArrayList<Type>
                             (cts.size());
@@ -2786,8 +2812,7 @@ public class Type extends Reference {
                 return union(types, unit);
             }
             else if (type.isIntersection()) {
-                List<Type> sts = 
-                        type.getSatisfiedTypes();
+                List<Type> sts = type.getSatisfiedTypes();
                 List<Type> types = 
                         new ArrayList<Type>
                             (sts.size());
@@ -2861,6 +2886,10 @@ public class Type extends Reference {
                 return substitutedType(dec, type,
                         covariant, contravariant);
             }
+//            }
+//            finally {
+//                decDepth();
+//            }
         }
 
         private Type substitutedAppliedTypeConstructor(
@@ -2868,8 +2897,7 @@ public class Type extends Reference {
                 TypeParameter typeConstructorParameter,
                 boolean covariant, boolean contravariant, 
                 Unit unit) {
-            List<Type> tal = 
-                    type.getTypeArgumentList();
+            List<Type> tal = type.getTypeArgumentList();
             List<TypeParameter> tpl = 
                     typeConstructorParameter.getTypeParameters();
             List<Type> sta = 
@@ -2987,50 +3015,47 @@ public class Type extends Reference {
         private Type substitutedType(
                 TypeDeclaration dec, Type type,
                 boolean covariant, boolean contravariant) {
-            Type receiverType = 
-                    type.getQualifyingType();
-            Type result = new Type();
-            result.setDeclaration(dec);
-            result.setTypeConstructor(type.isTypeConstructor());
-            result.setTypeConstructorParameter(
-                    type.getTypeConstructorParameter());
-            Map<TypeParameter, Type> typeArguments = 
-                    type.getTypeArguments();
-            Map<TypeParameter, Type> typeArgs;
+            Type result;
+            Type receiverType = type.getQualifyingType();
             if (receiverType!=null) {
-                //we have to aggregate the type arguments of
-                //the receiver since the contract is that
-                //a qualified type carries with it all the
-                //arguments of the qualifying type duped in
-                //its own map of type arguments
-                result.setQualifyingType(
-                        substitute(receiverType,
-                                covariant, contravariant));
-                Map<TypeParameter, Type> receiverTypeArgs = 
-                        receiverType.getTypeArguments();
-                typeArgs = new HashMap<TypeParameter, Type>
-                            (typeArguments.size() + 
-                             receiverTypeArgs.size());
+                receiverType = 
+                        substitute(receiverType, 
+                                covariant, contravariant);
+                List<Type> typeArgumentList =
+                        type.getTypeArgumentList();
+                List<Type> args = new ArrayList<Type>();
+                for (int i=0, s=typeArgumentList.size();
+                        i<s; i++) {
+                    args.add(substitute(
+                            typeArgumentList.get(i), 
+                            covariant, contravariant));
+                }
+                result = dec.appliedType(receiverType, args);
+            }
+            else {
+                result = new Type();
+                result.setDeclaration(dec);
+                Map<TypeParameter, Type> typeArguments = 
+                        type.getTypeArguments();
+                Map<TypeParameter, Type> typeArgs = 
+                        new HashMap<TypeParameter, Type>
+                            (typeArguments.size());
                 for (Map.Entry<TypeParameter, Type> e: 
-                        receiverTypeArgs.entrySet()) {
+                        typeArguments.entrySet()) {
                     substituteTypeArgument(typeArgs, type, 
                             covariant, contravariant, 
                             e.getKey(), e.getValue());
                 }
+                result.setTypeArguments(typeArgs);
             }
-            else {
-                typeArgs = new HashMap<TypeParameter, Type>
-                            (typeArguments.size());
-            }
-            for (Map.Entry<TypeParameter, Type> e: 
-                    typeArguments.entrySet()) {
-                substituteTypeArgument(typeArgs, type, 
-                        covariant, contravariant, 
-                        e.getKey(), e.getValue());
-            }
-            result.setTypeArguments(typeArgs);
-            result.setVarianceOverrides(type.getVarianceOverrides());
-            result.setUnderlyingType(type.getUnderlyingType());
+            result.setTypeConstructor(
+                    type.isTypeConstructor());
+            result.setTypeConstructorParameter(
+                    type.getTypeConstructorParameter());
+            result.setVarianceOverrides(
+                    type.getVarianceOverrides());
+            result.setUnderlyingType(
+                    type.getUnderlyingType());
             return result;
         }
 
@@ -3050,8 +3075,8 @@ public class Type extends Reference {
                     co = covariant;
                     contra = contravariant;
                 }
-                typeArgs.put(tp, substitute(arg,
-                        co, contra));
+                typeArgs.put(tp, 
+                        substitute(arg, co, contra));
             }
         }
         
@@ -3087,15 +3112,13 @@ public class Type extends Reference {
                 //parameter
                 for (TypeParameter tp: 
                         dec.getTypeParameters()) {
-                    TypeParameter stp = 
-                            new TypeParameter();
+                    TypeParameter stp = new TypeParameter();
                     stp.setName(tp.getName());
                     stp.setScope(tp.getScope());
                     stp.setContainer(tp.getContainer());
                     stp.setUnit(tp.getUnit());
                     stp.setDeclaration(ta);
-                    List<Type> sts = 
-                            tp.getSatisfiedTypes();
+                    List<Type> sts = tp.getSatisfiedTypes();
                     List<Type> ssts = 
                             new ArrayList<Type>
                                 (sts.size());
@@ -3105,8 +3128,7 @@ public class Type extends Reference {
                                 covariant, contravariant));
                     }
                     stp.setSatisfiedTypes(ssts);
-                    List<Type> cts = 
-                            tp.getCaseTypes();
+                    List<Type> cts = tp.getCaseTypes();
                     if (cts!=null) {
                         List<Type> scts = 
                                 new ArrayList<Type>
@@ -3299,8 +3321,7 @@ public class Type extends Reference {
         //of X are the intersection (U|V)&B canonicalized to
         //the union U&B|V&B
         if (isIntersection()) {
-            List<Type> sts = 
-                    getSatisfiedTypes();
+            List<Type> sts = getSatisfiedTypes();
             List<Type> list = 
                     new ArrayList<Type>
                         (sts.size());
@@ -3489,13 +3510,11 @@ public class Type extends Reference {
                 //enumerated type U of A|B|... to 
                 //the union type T&A|T&B|...
                 Type stu = et.getUnionOfCases();
-                if (stu.isUnion()) {
-                    Type it = 
-                            intersectionType(stu, type, unit);
-                    if (it.isSubtypeOf(this)) {
-                        return true;
-                    }
-                }
+                if (stu.isUnion() && 
+                        intersectionType(stu, type, unit)
+                            .isSubtypeOf(this)) {
+                  return true;
+               }
             }
             //X covers Y if Y satisfies Z and X covers Z
             for (Type st: type.getSatisfiedTypes()) {
@@ -3506,13 +3525,11 @@ public class Type extends Reference {
                 //for an enumerated type U of A|B|... to 
                 //the union type T&A|T&B|...
                 Type stu = st.getUnionOfCases();
-                if (stu.isUnion()) {
-                    Type it = 
-                            intersectionType(stu, type, unit);
-                    if (it.isSubtypeOf(this)) {
-                        return true;
-                    }
-                }
+                if (stu.isUnion() && 
+                        intersectionType(stu, type, unit)
+                            .isSubtypeOf(this)) {
+                  return true;
+               }
             }
             return false;
         }
@@ -3559,6 +3576,11 @@ public class Type extends Reference {
             }
             try {
                 resolvedAliases = resolveAliasesInternal();
+                /*if (resolvedAliases.isExactlyNothing()) {
+                    resolvedAliases = 
+                            getDeclaration().getUnit()
+                                .getNothingType();
+                }*/
             }
             finally {
                 if (!isTuple()) {
@@ -4012,6 +4034,10 @@ public class Type extends Reference {
         return getDeclaration().isNull();
     }
     
+    public boolean isNullValue() {
+        return getDeclaration().isNullValue();
+    }
+    
     public boolean isBasic() {
         return getDeclaration().isBasic();
     }
@@ -4048,12 +4074,24 @@ public class Type extends Reference {
         return getDeclaration().isSequential();
     }
     
+    public boolean isRange() {
+        return getDeclaration().isRange();
+    }
+    
     public boolean isEmpty() {
         return getDeclaration().isEmpty();
     }
     
+    public boolean isEmptyValue() {
+        return getDeclaration().isEmptyValue();
+    }
+    
     public boolean isTuple() {
         return getDeclaration().isTuple();
+    }
+    
+    public boolean isEntry() {
+        return getDeclaration().isEntry();
     }
     
     public int getMemoisedHashCode() {

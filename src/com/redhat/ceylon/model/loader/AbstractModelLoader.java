@@ -312,11 +312,11 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         return true;
     }
 
-    public boolean searchAgain(Module module, String name) {
+    public boolean searchAgain(ClassMirror cachedMirror, Module module, String name) {
         return false;
     }
     
-    public boolean searchAgain(LazyPackage lazyPackage, String name) {
+    public boolean searchAgain(Declaration cachedDeclaration, LazyPackage lazyPackage, String name) {
         return false;
     }
     
@@ -350,7 +350,7 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
                 // we use containsKey to be able to cache null results
                 if(classMirrorCache.containsKey(cacheKey)) {
                     ClassMirror cachedMirror = classMirrorCache.get(cacheKey);
-                    if (cachedMirror != null || ! searchAgain(module, name)) {
+                    if (! searchAgain(cachedMirror, module, name)) {
                         return cachedMirror;
                     }
                 }
@@ -936,6 +936,9 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         }else{
             // must be a Declaration
             for(Declaration member : container.getMembers()){
+                // avoid constructors with no name
+                if(member.getName() == null)
+                    continue;
                 if(!member.getName().equals(name))
                     continue;
                 Declaration result = selectTypeOrSetter(member, wantsSetter);
@@ -1245,15 +1248,15 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         return JavaVisibility.PRIVATE;
     }
 
-    private Declaration makeClassAlias(ClassMirror classMirror) {
+    protected Declaration makeClassAlias(ClassMirror classMirror) {
         return new LazyClassAlias(classMirror, this);
     }
 
-    private Declaration makeTypeAlias(ClassMirror classMirror) {
+    protected Declaration makeTypeAlias(ClassMirror classMirror) {
         return new LazyTypeAlias(classMirror, this);
     }
 
-    private Declaration makeInterfaceAlias(ClassMirror classMirror) {
+    protected Declaration makeInterfaceAlias(ClassMirror classMirror) {
         return new LazyInterfaceAlias(classMirror, this);
     }
 
@@ -1347,11 +1350,17 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
 
     protected LazyValue makeToplevelAttribute(ClassMirror classMirror) {
         LazyValue value = new LazyValue(classMirror, this);
+
+        manageNativeBackend(value, classMirror);
+
         return value;
     }
 
     protected LazyFunction makeToplevelMethod(ClassMirror classMirror) {
         LazyFunction method = new LazyFunction(classMirror, this);
+
+        manageNativeBackend(method, classMirror);
+
         return method;
     }
     
@@ -1383,6 +1392,9 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         klass.setActualCompleter(this);
         klass.setFinal(classMirror.isFinal());
         klass.setStaticallyImportable(!klass.isCeylon() && classMirror.isStatic());
+        
+        manageNativeBackend(klass, classMirror);
+        
         return klass;
     }
 
@@ -2000,7 +2012,6 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
     }
 
     private void complete(ClassOrInterface klass, ClassMirror classMirror) {
-        List<MethodMirror> variables = new LinkedList<MethodMirror>();
         boolean isFromJDK = isFromJDK(classMirror);
         boolean isCeylon = (classMirror.getAnnotation(CEYLON_CEYLON_ANNOTATION) != null);
         
@@ -2046,36 +2057,34 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         boolean seenHashGetter = false;
         MethodMirror stringSetter = null;
         MethodMirror hashSetter = null;
-        // Add the methods
+        Map<String, List<MethodMirror>> getters = new HashMap<>();
+        Map<String, List<MethodMirror>> setters = new HashMap<>();
+        
+        // Collect attributes
         for(List<MethodMirror> methodMirrors : methods.values()){
-            boolean isOverloaded = isMethodOverloaded(methodMirrors);
             
-            List<Declaration> overloads = null;
             for (MethodMirror methodMirror : methodMirrors) {
                 String methodName = methodMirror.getName();
                 // same tests as in isMethodOverloaded()
                 if(methodMirror.isConstructor() || isInstantiator(methodMirror)) {
                     break;
                 } else if(isGetter(methodMirror)) {
-                    // simple attribute
-                    addValue(klass, methodMirror, getJavaAttributeName(methodName), isCeylon);
+                    String name = getJavaAttributeName(methodName);
+                    putMultiMap(getters, name, methodMirror);
                 } else if(isSetter(methodMirror)) {
-                    // We skip setters for now and handle them later
-                    variables.add(methodMirror);
+                    String name = getJavaAttributeName(methodName);
+                    putMultiMap(setters, name, methodMirror);
                 } else if(isHashAttribute(methodMirror)) {
-                    // ERASURE
-                    // Un-erasing 'hash' attribute from 'hashCode' method
-                    addValue(klass, methodMirror, "hash", isCeylon);
+                    putMultiMap(getters, "hash", methodMirror);
                     seenHashAttribute = true;
                 } else if(isStringAttribute(methodMirror)) {
-                    // ERASURE
-                    // Un-erasing 'string' attribute from 'toString' method
-                    addValue(klass, methodMirror, "string", isCeylon);
+                    putMultiMap(getters, "string", methodMirror);
                     seenStringAttribute = true;
-                } else if(!methodMirror.getName().equals("hash")
-                        && !methodMirror.getName().equals("string")){
+                } else {
+                    // we never map getString to a property, or generate one
                     if(isStringGetter(methodMirror))
                         seenStringGetter = true;
+                    // same for getHash
                     else if(isHashGetter(methodMirror))
                         seenHashGetter = true;
                     else if(isStringSetter(methodMirror)){
@@ -2087,24 +2096,127 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
                         // we will perhaps add it later
                         continue;
                     }
-                    // normal method
-                    Function m = addMethod(klass, methodMirror, classMirror, isCeylon, isOverloaded);
-                    if (m.isOverloaded()) {
-                        overloads = overloads == null ? new ArrayList<Declaration>(methodMirrors.size()) :  overloads;
-                        overloads.add(m);
-                    }
                 }
             }
-            
-            if (overloads != null && !overloads.isEmpty()) {
-                // We create an extra "abstraction" method for overloaded methods
-                Function abstractionMethod = addMethod(klass, methodMirrors.get(0), classMirror, isCeylon, false);
-                abstractionMethod.setAbstraction(true);
-                abstractionMethod.setOverloads(overloads);
-                abstractionMethod.setType(newUnknownType());
+        }
+        
+        // now figure out which properties to add
+        NEXT_PROPERTY:
+        for(Map.Entry<String, List<MethodMirror>> getterEntry : getters.entrySet()){
+            String propertyName = getterEntry.getKey();
+            List<MethodMirror> getterList = getterEntry.getValue();
+            for(MethodMirror getterMethod : getterList){
+                // if it's hashCode() or toString() they win
+                if(isHashAttribute(getterMethod)) {
+                    // ERASURE
+                    // Un-erasing 'hash' attribute from 'hashCode' method
+                    addValue(klass, getterMethod, "hash", isCeylon);
+                    // remove it as a method and add all other getters with the same name
+                    // as methods
+                    removeMultiMap(methods, getterMethod.getName(), getterMethod);
+                    // next property
+                    continue NEXT_PROPERTY;
+                }
+                if(isStringAttribute(getterMethod)) {
+                    // ERASURE
+                    // Un-erasing 'string' attribute from 'toString' method
+                    addValue(klass, getterMethod, "string", isCeylon);
+                    // remove it as a method and add all other getters with the same name
+                    // as methods
+                    removeMultiMap(methods, getterMethod.getName(), getterMethod);
+                    // next property
+                    continue NEXT_PROPERTY;
+                }
+            }
+            // we've weeded out toString/hashCode, now if we have a single property it's easy we just add it
+            if(getterList.size() == 1){
+                // FTW!
+                MethodMirror getterMethod = getterList.get(0);
+                // simple attribute
+                addValue(klass, getterMethod, propertyName, isCeylon);
+                // remove it as a method
+                removeMultiMap(methods, getterMethod.getName(), getterMethod);
+                // next property
+                continue NEXT_PROPERTY;
+            }
+            // we have more than one
+            // if we have a setter let's favour the one that matches the setter
+            List<MethodMirror> matchingSetters = setters.get(propertyName);
+            if(matchingSetters != null){
+                if(matchingSetters.size() == 1){
+                    // single setter will tell us what we need
+                    MethodMirror matchingSetter = matchingSetters.get(0);
+                    MethodMirror bestGetter = null;
+                    boolean booleanSetter = matchingSetter.getParameters().get(0).getType().getKind() == TypeKind.BOOLEAN;
+                    /*
+                     * Getters do not support overloading since they have no parameters, so they can only differ based on
+                     * name. For boolean properties we favour "is" getters, otherwise "get" getters.
+                     */
+                    for(MethodMirror getterMethod : getterList){
+                        if(propertiesMatch(klass, getterMethod, matchingSetter)){
+                            if(bestGetter == null)
+                                bestGetter = getterMethod;
+                            else{
+                                // we have two getters, find the best one
+                                if(booleanSetter){
+                                    // favour the "is" getter
+                                    if(getterMethod.getName().startsWith("is"))
+                                        bestGetter = getterMethod;
+                                    // else keep the current best, it must be an "is" getter
+                                }else{
+                                    // favour the "get" getter
+                                    if(getterMethod.getName().startsWith("get"))
+                                        bestGetter = getterMethod;
+                                    // else keep the current best, it must be a "get" getter
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if(bestGetter != null){
+                        // got it!
+                        // simple attribute
+                        addValue(klass, bestGetter, propertyName, isCeylon);
+                        // remove it as a method and add all other getters with the same name
+                        // as methods
+                        removeMultiMap(methods, bestGetter.getName(), bestGetter);
+                        // next property
+                        continue NEXT_PROPERTY;
+                    }// else we cannot find the right getter thanks to the setter, keep looking
+                }
+            }
+            // setters did not help us, we have more than one getter, one must be "is"/boolean, the other "get"
+            if(getterList.size() == 2){
+                // if the "get" is also a boolean, prefer the "is"
+                MethodMirror isMethod = null;
+                MethodMirror getMethod = null;
+                for(MethodMirror getterMethod : getterList){
+                    if(getterMethod.getName().startsWith("is"))
+                        isMethod = getterMethod;
+                    else if(getterMethod.getName().startsWith("get"))
+                        getMethod = getterMethod;
+                }
+                if(isMethod != null && getMethod != null){
+                    MethodMirror bestGetter;
+                    if(getMethod.getReturnType().getKind() == TypeKind.BOOLEAN){
+                        // pick the is method
+                        bestGetter = isMethod;
+                    }else{
+                        // just take the getter
+                        bestGetter = getMethod;
+                    }
+                    // simple attribute
+                    addValue(klass, bestGetter, propertyName, isCeylon);
+                    // remove it as a method and add all other getters with the same name
+                    // as methods
+                    removeMultiMap(methods, bestGetter.getName(), bestGetter);
+                    // next property
+                    continue NEXT_PROPERTY;
+                }
             }
         }
 
+        // now handle fields
         for(FieldMirror fieldMirror : classMirror.getDirectFields()){
             // We skip members marked with @Ignore
             if(fieldMirror.getAnnotation(CEYLON_IGNORE_ANNOTATION) != null)
@@ -2126,12 +2238,99 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
             }
         }
 
+        // Now mark all Values for which Setters exist as variable
+        for(List<MethodMirror> variables : setters.values()){
+            for(MethodMirror setter : variables){
+                String name = getJavaAttributeName(setter.getName());
+                // make sure we handle private postfixes
+                name = JvmBackendUtil.strip(name, isCeylon, setter.isPublic());
+                Declaration decl = klass.getMember(name, null, false);
+                // skip Java fields, which we only get if there is no getter method, in that case just add the setter method
+                if (decl instanceof JavaBeanValue) {
+                    JavaBeanValue value = (JavaBeanValue)decl;
+                    // only add the setter if it has the same visibility as the getter
+                    if (setter.isPublic() && value.mirror.isPublic()
+                            || setter.isProtected() && value.mirror.isProtected()
+                            || setter.isDefaultAccess() && value.mirror.isDefaultAccess()
+                            || (!setter.isPublic() && !value.mirror.isPublic()
+                                    && !setter.isProtected() && !value.mirror.isProtected()
+                                    && !setter.isDefaultAccess() && !value.mirror.isDefaultAccess())) {
+                        VariableMirror setterParam = setter.getParameters().get(0);
+                        Type paramType = obtainType(setterParam.getType(), setterParam, klass, ModelUtil.getModuleContainer(klass), VarianceLocation.INVARIANT,
+                                "setter '"+setter.getName()+"'", klass);
+                        // only add the setter if it has exactly the same type as the getter
+                        if(paramType.isExactly(value.getType())){
+                            value.setVariable(true);
+                            value.setSetterName(setter.getName());
+                            if(value.isTransient()){
+                                // must be a real setter
+                                makeSetter(value, null);
+                            }
+                            // remove it as a method
+                            removeMultiMap(methods, setter.getName(), setter);
+                        }else
+                            logVerbose("Setter parameter type for "+name+" does not match corresponding getter type, adding setter as a method");
+                    } else {
+                        logVerbose("Setter visibility for "+name+" does not match corresponding getter visibility, adding setter as a method");
+                    }
+                }
+            }
+        }
+
+        // special cases if we have hashCode() setHash() and no getHash()
+        if(hashSetter != null){
+            if(seenHashAttribute && !seenHashGetter){
+                Declaration attr = klass.getDirectMember("hash", null, false);
+                if(attr instanceof JavaBeanValue){
+                    ((JavaBeanValue) attr).setVariable(true);
+                    ((JavaBeanValue) attr).setSetterName(hashSetter.getName());
+                    // remove it as a method
+                    removeMultiMap(methods, hashSetter.getName(), hashSetter);
+                }
+            }
+        }
+        // special cases if we have toString() setString() and no getString()
+        if(stringSetter != null){
+            if(seenStringAttribute && !seenStringGetter){
+                Declaration attr = klass.getDirectMember("string", null, false);
+                if(attr instanceof JavaBeanValue){
+                    ((JavaBeanValue) attr).setVariable(true);
+                    ((JavaBeanValue) attr).setSetterName(stringSetter.getName());
+                    // remove it as a method
+                    removeMultiMap(methods, stringSetter.getName(), stringSetter);
+                }
+            }
+        }
+
+        // Add the methods, treat remaining getters/setters as methods
+        for(List<MethodMirror> methodMirrors : methods.values()){
+            boolean isOverloaded = isMethodOverloaded(methodMirrors);
+            
+            List<Declaration> overloads = null;
+            for (MethodMirror methodMirror : methodMirrors) {
+                // normal method
+                Function m = addMethod(klass, methodMirror, classMirror, isCeylon, isOverloaded);
+                if (m.isOverloaded()) {
+                    overloads = overloads == null ? new ArrayList<Declaration>(methodMirrors.size()) :  overloads;
+                    overloads.add(m);
+                }
+            }
+            
+            if (overloads != null && !overloads.isEmpty()) {
+                // We create an extra "abstraction" method for overloaded methods
+                Function abstractionMethod = addMethod(klass, methodMirrors.get(0), classMirror, isCeylon, false);
+                abstractionMethod.setAbstraction(true);
+                abstractionMethod.setOverloads(overloads);
+                abstractionMethod.setType(newUnknownType());
+            }
+        }
+
         // Having loaded methods and values, we can now set the constructor parameters
         if(constructor != null
                 && !isDefaultNamedCtor(classMirror, constructor)
                 && (!(klass instanceof LazyClass) || !((LazyClass)klass).isAnonymous()))
             setParameters((Class)klass, classMirror, constructor, isCeylon, klass);
-        
+
         // Now marry-up attributes and parameters)
         if (klass instanceof Class) {
             for (Declaration m : klass.getMembers()) {
@@ -2142,79 +2341,6 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
                         p.setHidden(true);
                     }
                 }
-            }
-        }
-
-        // Now mark all Values for which Setters exist as variable
-        for(MethodMirror setter : variables){
-            String name = getJavaAttributeName(setter.getName());
-            // make sure we handle private postfixes
-            name = JvmBackendUtil.strip(name, isCeylon, setter.isPublic());
-            Declaration decl = klass.getMember(name, null, false);
-            boolean foundGetter = false;
-            // skip Java fields, which we only get if there is no getter method, in that case just add the setter method
-            if (decl instanceof JavaBeanValue) {
-                JavaBeanValue value = (JavaBeanValue)decl;
-                // only add the setter if it has the same visibility as the getter
-                if (setter.isPublic() && value.mirror.isPublic()
-                        || setter.isProtected() && value.mirror.isProtected()
-                        || setter.isDefaultAccess() && value.mirror.isDefaultAccess()
-                        || (!setter.isPublic() && !value.mirror.isPublic()
-                        && !setter.isProtected() && !value.mirror.isProtected()
-                        && !setter.isDefaultAccess() && !value.mirror.isDefaultAccess())) {
-                    VariableMirror setterParam = setter.getParameters().get(0);
-                    Type paramType = obtainType(setterParam.getType(), setterParam, klass, ModelUtil.getModuleContainer(klass), VarianceLocation.INVARIANT,
-                            "setter '"+setter.getName()+"'", klass);
-                    // only add the setter if it has exactly the same type as the getter
-                    if(paramType.isExactly(value.getType())){
-                        foundGetter = true;
-                        value.setVariable(true);
-                        value.setSetterName(setter.getName());
-                        if(value.isTransient()){
-                            // must be a real setter
-                            makeSetter(value, null);
-                        }
-                    }else
-                        logVerbose("Setter parameter type for "+name+" does not match corresponding getter type, adding setter as a method");
-                } else {
-                    logVerbose("Setter visibility for "+name+" does not match corresponding getter visibility, adding setter as a method");
-                }
-            }
-            
-            if(!foundGetter){
-                // it was not a setter, it was a method, let's add it as such
-                addMethod(klass, setter, classMirror, isCeylon, false);
-            }
-        }
-
-        // special cases if we have hashCode() setHash() and no getHash()
-        if(hashSetter != null){
-            boolean addSetter = true;
-            if(seenHashAttribute && !seenHashGetter){
-                Declaration attr = klass.getDirectMember("hash", null, false);
-                if(attr instanceof JavaBeanValue){
-                    ((JavaBeanValue) attr).setVariable(true);
-                    ((JavaBeanValue) attr).setSetterName(hashSetter.getName());
-                    addSetter = false;
-                }
-            }
-            if(addSetter){
-                addMethod(klass, hashSetter, classMirror, isCeylon, false);
-            }
-        }
-        // special cases if we have toString() setString() and no getString()
-        if(stringSetter != null){
-            boolean addSetter = true;
-            if(seenStringAttribute && !seenStringGetter){
-                Declaration attr = klass.getDirectMember("string", null, false);
-                if(attr instanceof JavaBeanValue){
-                    ((JavaBeanValue) attr).setVariable(true);
-                    ((JavaBeanValue) attr).setSetterName(stringSetter.getName());
-                    addSetter = false;
-                }
-            }
-            if(addSetter){
-                addMethod(klass, stringSetter, classMirror, isCeylon, false);
             }
         }
         
@@ -2253,6 +2379,47 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         }
     }
 
+    private boolean propertiesMatch(ClassOrInterface klass, MethodMirror getter, MethodMirror setter) {
+        // only add the setter if it has the same visibility as the getter
+        if (setter.isPublic() && getter.isPublic()
+                || setter.isProtected() && getter.isProtected()
+                || setter.isDefaultAccess() && getter.isDefaultAccess()
+                || (!setter.isPublic() && !getter.isPublic()
+                    && !setter.isProtected() && !getter.isProtected()
+                    && !setter.isDefaultAccess() && !getter.isDefaultAccess())) {
+            Module module = ModelUtil.getModuleContainer(klass);
+            VariableMirror setterParam = setter.getParameters().get(0);
+            Type paramType = obtainType(setterParam.getType(), setterParam, klass, module, VarianceLocation.INVARIANT,
+                    "setter '"+setter.getName()+"'", klass);
+
+            Type returnType = obtainType(getter.getReturnType(), getter, klass, module, VarianceLocation.INVARIANT,
+                    "getter '"+getter.getName()+"'", klass);
+            // only add the setter if it has exactly the same type as the getter
+            if(paramType.isExactly(returnType)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private <Key,Val> void removeMultiMap(Map<Key, List<Val>> map, Key key, Val val) {
+        List<Val> list = map.get(key);
+        if(list != null){
+            list.remove(val);
+            if(list.isEmpty())
+                map.remove(key);
+        }
+    }
+    
+    private <Key,Val> void putMultiMap(Map<Key, List<Val>> map, Key key, Val value) {
+        List<Val> list = map.get(key);
+        if(list == null){
+            list = new LinkedList<>();
+            map.put(key, list);
+        }
+        list.add(value);
+    }
+    
     private void addConstructor(Class klass, ClassMirror classMirror, MethodMirror ctor) {
         boolean isCeylon = classMirror.getAnnotation(CEYLON_CEYLON_ANNOTATION) != null;
         Constructor constructor = new Constructor();
@@ -2260,6 +2427,7 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         constructor.setContainer(klass);
         constructor.setScope(klass);
         constructor.setUnit(klass.getUnit());
+        constructor.setAbstract(ctor.getAnnotation(CEYLON_LANGUAGE_ABSTRACT_ANNOTATION) != null);
         constructor.setExtendedType(klass.getType());
         setDeclarationVisibilityAndDeprecation(constructor, ctor, ctor, classMirror, isCeylon);
         setAnnotations(constructor, ctor);
@@ -2327,6 +2495,10 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
             if(isCeylon && methodMirror.isStatic()
                     && methodMirror.getAnnotation(CEYLON_ENUMERATED_ANNOTATION) == null)
                 continue;
+            // these are not relevant for our caller
+            if(methodMirror.isConstructor() || isInstantiator(methodMirror)) {
+                continue;
+            } 
             // FIXME: temporary, because some private classes from the jdk are
             // referenced in private methods but not available
             if(isFromJDK && !methodMirror.isPublic() && !methodMirror.isProtected())
@@ -2439,7 +2611,16 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
                 hasCeylonDeprecated = true;
             }
         }
-        
+
+        if (annotated instanceof Declaration
+                && ((Declaration)annotated).getNativeBackend() != null) {
+            // Do nothing : 
+            //    it has already been managed when in the makeLazyXXX() function
+        } else {
+            manageNativeBackend(annotated, classMirror);
+        }
+    }
+    private void manageNativeBackend(Annotated annotated, AnnotatedMirror classMirror) {
         // Set "native" annotation
         String nativeBackend = getAnnotationStringValue(classMirror, CEYLON_LANGUAGE_NATIVE_ANNOTATION, "backend");
         if (nativeBackend != null) {
@@ -3621,6 +3802,18 @@ public abstract class AbstractModelLoader implements ModelCompleter, ModelLoader
         setter.setScope(value.getContainer());
         setter.setType(value.getType());
         setter.setName(value.getName());
+        Parameter p = new Parameter();
+        p.setHidden(true);
+        Value v = new Value();
+        v.setType(value.getType());
+        v.setUnboxed(value.getUnboxed());
+        v.setInitializerParameter(p);
+        v.setContainer(setter);
+        p.setModel(v);
+        v.setName(setter.getName());
+        p.setName(setter.getName());
+        p.setDeclaration(setter);
+        setter.setParameter(p);
         value.setSetter(setter);
         setter.setGetter(value);
         return setter;
